@@ -1,6 +1,8 @@
-flask
-gunicorn
+fastapi
+uvicorn[standard]
 openai
 twilio
 python-dotenv
 requests
+pandas
+jinja2
