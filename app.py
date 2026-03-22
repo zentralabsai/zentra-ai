@@ -1,5 +1,4 @@
-from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, FileResponsefrom fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
@@ -26,10 +25,9 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", include_in_schema=False)
 def home():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    return FileResponse("static/index.html")
 
 
 LEADS_FILE = "leads.csv"
