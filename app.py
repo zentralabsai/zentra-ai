@@ -1,5 +1,6 @@
-from fastapi.responses import HTMLResponse, FileResponsefrom fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
 from twilio.rest import Client
@@ -15,6 +16,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
