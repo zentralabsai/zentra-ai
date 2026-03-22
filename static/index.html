@@ -1,253 +1,268 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Roofing AI Assistant</title>
-
-<style>
-*{box-sizing:border-box;}
-
-body{
-font-family:Arial,sans-serif;
-margin:0;
-background:transparent;
-}
-
-#chat-toggle{
-position:fixed;
-bottom:20px;
-right:20px;
-width:60px;
-height:60px;
-border-radius:50%;
-border:none;
-background:#007aff;
-color:white;
-font-size:24px;
-cursor:pointer;
-box-shadow:0 8px 20px rgba(0,0,0,0.2);
-z-index:10001;
-}
-
-#chatbox{
-position:fixed;
-bottom:90px;
-right:20px;
-width:380px;
-height:520px;
-background:white;
-border-radius:16px;
-box-shadow:0 8px 30px rgba(0,0,0,0.18);
-padding:16px;
-display:flex;
-flex-direction:column;
-}
-
-#messages{
-flex:1;
-overflow-y:auto;
-margin-bottom:10px;
-}
-
-.message{margin-bottom:10px;}
-.user{text-align:right;color:#007aff;}
-.ai{text-align:left;color:#333;}
-
-.input-row{
-display:flex;
-gap:8px;
-}
-
-.input-row input{
-flex:1;
-padding:10px;
-border-radius:6px;
-border:1px solid #ddd;
-}
-
-button{
-padding:10px 14px;
-border:none;
-background:#007aff;
-color:white;
-border-radius:6px;
-cursor:pointer;
-}
-
-.quick-buttons{
-display:flex;
-flex-wrap:wrap;
-gap:6px;
-margin-top:10px;
-}
-
-.quick-buttons button{
-background:#f3f6fb;
-color:#333;
-border:1px solid #dbe3f0;
-border-radius:20px;
-padding:6px 12px;
-font-size:13px;
-}
-
-.typing span{
-display:inline-block;
-width:6px;
-height:6px;
-margin:0 2px;
-background:#888;
-border-radius:50%;
-animation:blink 1.4s infinite both;
-}
-
-@keyframes blink{
-0%{opacity:.2;}
-20%{opacity:1;}
-100%{opacity:.2;}
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zentra | AI Lead Infrastructure</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: white;
+      line-height: 1.5;
+    }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 40px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(11,16,32,0.95);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .brand img {
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+    }
+    .nav a {
+      color: white;
+      text-decoration: none;
+      margin-left: 18px;
+      opacity: 0.9;
+    }
+    .hero {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 90px 40px 70px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 40px;
+      align-items: center;
+    }
+    .hero h1 {
+      font-size: 58px;
+      line-height: 1.05;
+      margin-bottom: 18px;
+    }
+    .hero p {
+      font-size: 20px;
+      color: #c7d2fe;
+      max-width: 640px;
+      margin-bottom: 28px;
+    }
+    .buttons {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-block;
+      padding: 14px 22px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+    .btn-secondary {
+      border: 1px solid rgba(255,255,255,0.14);
+      color: white;
+      background: rgba(255,255,255,0.03);
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(37,99,235,0.14), rgba(255,255,255,0.03));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .section {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 40px 70px;
+    }
+    .section h2 {
+      font-size: 34px;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      color: #c7d2fe;
+      margin-bottom: 28px;
+      max-width: 760px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .feature {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 24px;
+    }
+    .feature h3 {
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+    .feature p {
+      color: #c7d2fe;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .step {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      padding: 24px;
+    }
+    .step-number {
+      font-size: 14px;
+      color: #60a5fa;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+    .cta {
+      text-align: center;
+      padding: 70px 40px 90px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .cta h2 {
+      font-size: 40px;
+      margin-bottom: 14px;
+    }
+    .cta p {
+      color: #c7d2fe;
+      margin-bottom: 24px;
+      font-size: 18px;
+    }
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 24px 40px 40px;
+      color: #94a3b8;
+      text-align: center;
+    }
+    @media (max-width: 900px) {
+      .hero, .grid, .steps { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 42px; }
+      .nav { padding: 18px 20px; }
+      .hero, .section { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
 </head>
-
 <body>
+  <nav class="nav">
+    <div class="brand">
+      <img src="/static/logo.jpeg" alt="Zentra logo">
+      <span>Zentra</span>
+    </div>
+    <div>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="/leads">Dashboard</a>
+    </div>
+  </nav>
 
-<button id="chat-toggle" onclick="toggleChat()">💬</button>
+  <section class="hero">
+    <div>
+      <h1>AI lead infrastructure for home service businesses.</h1>
+      <p>
+        Zentra captures, qualifies, routes, and follows up with inbound leads in real time —
+        so contractors close more jobs without losing speed.
+      </p>
+      <div class="buttons">
+        <a class="btn btn-primary" href="/leads">View Demo Dashboard</a>
+        <a class="btn btn-secondary" href="#how">See how it works</a>
+      </div>
+    </div>
 
-<div id="chatbox" style="display:none;">
+    <div class="card">
+      <h3 style="font-size:26px; margin-bottom:12px;">What Zentra does</h3>
+      <p style="color:#c7d2fe; margin-bottom:16px;">
+        Converts raw enquiries into qualified, routed, high-intent opportunities.
+      </p>
+      <ul style="padding-left:18px; color:#e5e7eb;">
+        <li>Instant AI qualification</li>
+        <li>SMS and email notifications</li>
+        <li>Location-based contractor routing</li>
+        <li>Lead scoring and urgency tagging</li>
+        <li>Operational visibility through dashboard</li>
+      </ul>
+    </div>
+  </section>
 
-<h3>Roofing AI Assistant</h3>
+  <section class="section" id="features">
+    <h2>Built to increase speed-to-lead</h2>
+    <p class="section-sub">
+      Zentra helps service businesses respond faster, route smarter, and operate with better visibility across inbound demand.
+    </p>
 
-<div id="messages">
+    <div class="grid">
+      <div class="feature">
+        <h3>Lead Capture</h3>
+        <p>Capture inbound enquiries through a branded AI assistant and structure them instantly.</p>
+      </div>
+      <div class="feature">
+        <h3>Smart Qualification</h3>
+        <p>Extract issue, urgency, roof type, insurance context, and timing automatically.</p>
+      </div>
+      <div class="feature">
+        <h3>Routing & Alerts</h3>
+        <p>Send leads to the right contractor by market, with immediate SMS and email delivery.</p>
+      </div>
+    </div>
+  </section>
 
-<div class="message ai">
-Hi! 👋 I can help you get a fast roofing repair quote.<br><br>
-What issue are you having with your roof?
-</div>
+  <section class="section" id="how">
+    <h2>How it works</h2>
+    <p class="section-sub">
+      A simple 3-step system that turns inbound demand into booked opportunities.
+    </p>
 
-<div class="quick-buttons">
-<button onclick="quickReply('Active roof leak')">🚨 Active Leak</button>
-<button onclick="quickReply('Storm damage')">🌩 Storm Damage</button>
-<button onclick="quickReply('Missing shingles')">🧱 Missing Shingles</button>
-<button onclick="quickReply('General roof repair')">🛠 General Repair</button>
-</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">01</div>
+        <h3>Customer engages</h3>
+        <p>The AI assistant collects the lead details in a structured format.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">02</div>
+        <h3>Zentra qualifies</h3>
+        <p>The lead is scored, categorized, and evaluated for urgency and routing.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">03</div>
+        <h3>Contractor receives it</h3>
+        <p>The right contractor gets the lead instantly through SMS, email, and dashboard visibility.</p>
+      </div>
+    </div>
+  </section>
 
-</div>
+  <section class="cta">
+    <h2>Turn inbound demand into booked jobs.</h2>
+    <p>Zentra gives home service operators a faster, smarter lead intake and routing system.</p>
+    <a class="btn btn-primary" href="/leads">Open Demo</a>
+  </section>
 
-<div class="input-row">
-<input id="question" type="text" placeholder="Ask about roof repair..." onkeypress="if(event.key==='Enter'){askAI()}" />
-<button onclick="askAI()">Send</button>
-</div>
-
-</div>
-
-<script>
-
-let history="";
-
-function toggleChat(){
-const chatbox=document.getElementById("chatbox");
-chatbox.style.display=chatbox.style.display==="flex"?"none":"flex";
-}
-
-function quickReply(text){
-document.getElementById("question").value=text;
-askAI();
-}
-
-function addMessage(text,type){
-const container=document.getElementById("messages");
-const msg=document.createElement("div");
-msg.className="message "+type;
-msg.innerText=text;
-container.appendChild(msg);
-container.scrollTop=container.scrollHeight;
-}
-
-function isValidEmail(v){
-return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-}
-
-function isValidPhone(v){
-const digits=v.replace(/\D/g,"");
-return digits.length>=7 && digits.length<=15;
-}
-
-async function askAI(){
-
-const input=document.getElementById("question");
-const question=input.value.trim();
-
-if(!question){
-alert("Please enter a message.");
-return;
-}
-
-/* SMART VALIDATION BASED ON USER INPUT */
-
-const digits=question.replace(/\D/g,"");
-
-if(question.includes("@")){
-if(!isValidEmail(question)){
-alert("Please enter a valid email address.");
-return;
-}
-}
-
-else if(digits.length>=7){
-if(!isValidPhone(question)){
-alert("Please enter a valid phone number.");
-return;
-}
-}
-
-addMessage(question,"user");
-input.value="";
-
-const container=document.getElementById("messages");
-
-const typing=document.createElement("div");
-typing.className="message ai";
-typing.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
-
-container.appendChild(typing);
-container.scrollTop=container.scrollHeight;
-
-const res=await fetch(
-"/ask?question="+encodeURIComponent(question)+"&history="+encodeURIComponent(history)
-);
-
-const data=await res.json();
-let reply=data.ai_response||"";
-
-let leadCaptured=false;
-
-if(reply.includes("LEAD_CAPTURED")){
-leadCaptured=true
-}
-
-let displayReply=reply
-
-if(leadCaptured){
-displayReply=reply.split("LEAD_CAPTURED")[0].trim()
-}
-
-if(leadCaptured){
-
-const input=document.getElementById("question")
-const sendButton=document.querySelector(".input-row button")
-
-input.disabled=true
-sendButton.disabled=true
-
-input.placeholder="Lead submitted — a roofing specialist will contact you shortly"
-
-}
-
-const aiList=document.querySelectorAll("#messages .ai");
-aiList[aiList.length-1].innerHTML=displayReply.replace(/\n/g,"<br>");
-history+="User: "+question+"\nAI: "+reply+"\n";
-
-}
-
-</script>
-
+  <footer>
+    © 2026 Zentra. AI infrastructure for home service growth.
+  </footer>
 </body>
 </html>
