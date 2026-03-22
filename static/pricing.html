@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zentra | Pricing</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: white;
+      line-height: 1.5;
+    }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 24px 40px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: rgba(11,16,32,0.95);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      text-decoration: none;
+    }
+    .brand img {
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+    }
+    .nav-links a {
+      color: white;
+      text-decoration: none;
+      margin-left: 18px;
+      opacity: 0.9;
+    }
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 80px 24px 30px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 56px;
+      line-height: 1.05;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      color: #c7d2fe;
+      font-size: 20px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .pricing {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 90px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+    }
+    .featured {
+      background: linear-gradient(180deg, rgba(37,99,235,0.16), rgba(255,255,255,0.03));
+      border: 1px solid rgba(37,99,235,0.45);
+      transform: scale(1.02);
+    }
+    .tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #93c5fd;
+      margin-bottom: 14px;
+    }
+    .plan {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .price {
+      font-size: 48px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .price span {
+      font-size: 18px;
+      font-weight: 500;
+      color: #c7d2fe;
+    }
+    .desc {
+      color: #c7d2fe;
+      margin-bottom: 24px;
+      min-height: 48px;
+    }
+    ul {
+      list-style: none;
+      margin-bottom: 28px;
+    }
+    li {
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      color: #e5e7eb;
+    }
+    .btn {
+      display: inline-block;
+      width: 100%;
+      text-align: center;
+      padding: 14px 18px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: white;
+    }
+    .custom {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 24px 90px;
+    }
+    .custom-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 32px;
+      text-align: center;
+    }
+    .custom-box h2 {
+      font-size: 34px;
+      margin-bottom: 12px;
+    }
+    .custom-box p {
+      color: #c7d2fe;
+      margin-bottom: 20px;
+      font-size: 18px;
+    }
+    footer {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding: 24px 40px 40px;
+      color: #94a3b8;
+      text-align: center;
+    }
+    @media (max-width: 950px) {
+      .pricing {
+        grid-template-columns: 1fr;
+      }
+      .featured {
+        transform: none;
+      }
+      .hero h1 {
+        font-size: 42px;
+      }
+      .nav {
+        padding: 18px 20px;
+      }
+      .nav-links a {
+        margin-left: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a class="brand" href="/">
+      <img src="/static/logo.jpeg" alt="Zentra logo">
+      <span>Zentra</span>
+    </a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/static/pricing.html">Pricing</a>
+      <a href="/leads">Dashboard</a>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <h1>Pricing built for growth.</h1>
+    <p>
+      Start lean, validate demand, and scale your lead infrastructure as your volume grows.
+    </p>
+  </section>
+
+  <section class="pricing">
+    <div class="card">
+      <div class="tag">Starter</div>
+      <div class="plan">Launch</div>
+      <div class="price">€299<span>/month</span></div>
+      <p class="desc">For small contractors testing AI-powered lead intake.</p>
+      <ul>
+        <li>AI lead capture</li>
+        <li>Email notifications</li>
+        <li>Basic routing</li>
+        <li>Lead dashboard</li>
+        <li>Up to 100 leads / month</li>
+      </ul>
+      <a class="btn btn-secondary" href="/leads">Start Demo</a>
+    </div>
+
+    <div class="card featured">
+      <div class="tag">Most Popular</div>
+      <div class="plan">Growth</div>
+      <div class="price">€999<span>/month</span></div>
+      <p class="desc">For operators who want serious speed-to-lead and conversion uplift.</p>
+      <ul>
+        <li>Everything in Launch</li>
+        <li>SMS + email notifications</li>
+        <li>Multi-market routing</li>
+        <li>Priority lead scoring</li>
+        <li>Dashboard visibility</li>
+        <li>Up to 500 leads / month</li>
+      </ul>
+      <a class="btn btn-primary" href="/leads">Book Demo</a>
+    </div>
+
+    <div class="card">
+      <div class="tag">Enterprise</div>
+      <div class="plan">Scale</div>
+      <div class="price">Custom</div>
+      <p class="desc">For larger home service groups and multi-location operators.</p>
+      <ul>
+        <li>Unlimited routing logic</li>
+        <li>Custom workflows</li>
+        <li>Dedicated onboarding</li>
+        <li>Advanced reporting</li>
+        <li>Multi-team setup</li>
+        <li>Custom integrations</li>
+      </ul>
+      <a class="btn btn-secondary" href="mailto:hello@zentra.ai">Talk to Sales</a>
+    </div>
+  </section>
+
+  <section class="custom">
+    <div class="custom-box">
+      <h2>Need custom deployment?</h2>
+      <p>
+        Zentra can be configured for multi-location contractors, high-volume lead ops,
+        and custom routing flows.
+      </p>
+      <a class="btn btn-primary" style="max-width:260px;" href="/leads">Request a Demo</a>
+    </div>
+  </section>
+
+  <footer>
+    © 2026 Zentra. AI infrastructure for home service growth.
+  </footer>
+</body>
+</html>
