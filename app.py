@@ -31,6 +31,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 def home():
     return FileResponse("static/index.html")
 
+from fastapi import Request
+
+@app.post("/api/lead")
+async def receive_lead(request: Request):
+    data = await request.json()
+
+    name = data.get("name")
+    phone = data.get("phone")
+    email = data.get("email")
+    location = data.get("location")
+    service = data.get("service")
+    message = data.get("message")
+    urgency = data.get("urgency")
+
+    with open("leads.csv", "a") as f:
+        f.write(f"{name},{phone},{email},{location},{service},{message},{urgency}\n")
+
+    return {"message": "Lead submitted successfully"}
 
 LEADS_FILE = "leads.csv"
 

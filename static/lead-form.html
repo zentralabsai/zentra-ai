@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zentra Lead Form</title>
+
+<style>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0b1020;
+    color: white;
+    padding: 40px;
+}
+
+.container {
+    max-width: 600px;
+    margin: auto;
+}
+
+input, textarea, select {
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+    margin-bottom: 18px;
+    border-radius: 8px;
+    border: none;
+}
+
+button {
+    background: #4f6df5;
+    color: white;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    width: 100%;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #3f5ae0;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+    <h1>Request Roofing Quote</h1>
+
+    <form id="leadForm">
+        <label>Name</label>
+        <input type="text" name="name" required>
+
+        <label>Phone</label>
+        <input type="text" name="phone" required>
+
+        <label>Email</label>
+        <input type="email" name="email">
+
+        <label>City / ZIP</label>
+        <input type="text" name="location">
+
+        <label>Service Needed</label>
+        <select name="service">
+            <option>Roof Repair</option>
+            <option>Roof Replacement</option>
+            <option>Leak Inspection</option>
+            <option>New Roof</option>
+        </select>
+
+        <label>Message</label>
+        <textarea name="message"></textarea>
+
+        <label>Urgency</label>
+        <select name="urgency">
+            <option>Low</option>
+            <option>Medium</option>
+            <option>High</option>
+        </select>
+
+        <button type="submit">Submit Request</button>
+    </form>
+
+    <p id="result"></p>
+</div>
+
+<script>
+document.getElementById("leadForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+
+    const response = await fetch("/api/lead", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+    document.getElementById("result").innerText = result.message;
+});
+</script>
+
+</body>
+</html>
