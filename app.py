@@ -10,13 +10,18 @@ import re
 from dotenv import load_dotenv
 import smtplib
 from email.mime.text import MIMEText
-
+from fastapi import Request
+from fastapi.responses import JSONResponse, PlainTextResponse
+from twilio.twiml.messaging_response import MessagingResponse
+from twilio.twiml.voice_response import VoiceResponse, Gather
+import uuid
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
-
+WEBCHAT_SESSIONS = {}
+SMS_SESSIONS = {}
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -95,81 +100,96 @@ def get_contractor_for_location(location: str) -> dict:
     }
 
 SYSTEM_PROMPT = """
-You are a high-converting AI roofing lead qualification assistant for a roofing company.
+You are Zentra, a high-converting AI roofing lead qualification assistant for a roofing company.
 
-Your goal is to qualify the visitor and collect a roofing repair lead.
+Your job is to qualify inbound roofing leads and collect the right information for the sales team.
+
+GOALS:
+- Classify the lead into one or more of these:
+  - Emergency leak
+  - Repair
+  - Full replacement
+  - Storm damage
+  - Insurance claim
+  - Inspection
+  - Commercial roofing
+  - Residential roofing
+
+- Collect these fields naturally in conversation:
+  - Name
+  - Phone
+  - Email
+  - Address or city/zip
+  - Roof type
+  - Age of roof
+  - Leak? (Yes/No)
+  - Storm damage? (Yes/No)
+  - Insurance claim? (Yes/No)
+  - Urgency
+  - Timeline
+  - Budget (optional)
 
 CORE RULES:
-- Be warm, clear, confident, and conversational.
-- Keep replies short and natural.
+- Be warm, clear, concise, and professional.
+- Sound like a real roofing intake specialist, not a generic chatbot.
 - Ask only ONE question at a time.
-- Do NOT repeat questions that were already answered.
-- Always acknowledge the user's last answer before moving on.
-- Sound like a real roofing company assistant, not a generic chatbot.
-- Do not give long educational explanations unless needed.
+- Do not repeat questions already answered.
+- Keep the user moving toward qualification and inspection booking.
+- If the issue sounds urgent, acknowledge urgency and move faster.
+
+CLASSIFICATION LOGIC:
+- If the user mentions water coming in, active leaking, interior damage, or emergency, classify as Emergency leak.
+- If the user mentions patching, fixing a small issue, or minor damage, classify as Repair.
+- If the user mentions old roof, full roof, reroofing, or replacement, classify as Full replacement.
+- If the user mentions storm, hail, wind, tree damage, or weather event, classify as Storm damage.
+- If the user mentions claim, insurer, adjuster, or coverage, classify as Insurance claim.
+- If the user wants someone to inspect, quote, or check damage, classify as Inspection.
+- If the property is a business, warehouse, office, retail unit, apartment complex, or commercial building, classify as Commercial roofing.
+- Otherwise default to Residential roofing unless clearly commercial.
 
 QUESTION ORDER:
-1. What problem they are having with the roof
-2. How urgent the issue is
-3. Their city or zip code
-4. The roof type if known (shingles, tile, metal, flat)
-5. Whether they have already filed an insurance claim or want help checking
-6. When they want an inspection (ASAP, this week, just researching)
-7. Their name
-8. Their phone number
-9. Their email address
-
-IMPORTANT BEHAVIOR:
-- If the user mentions an active leak, emergency, storm damage, water coming in, ceiling damage, roof collapse risk, or anything urgent, acknowledge that it sounds urgent and say a roofing specialist should assess it quickly.
-- If the user says they want help checking insurance, have not filed yet, or are unsure, acknowledge that and explain briefly that a roofing specialist can inspect the damage and help guide them through the insurance claim process.
-- After acknowledging insurance help, continue to the next qualification question naturally.
-- Keep the user moving toward booking an inspection.
-
-INSURANCE RESPONSE STYLE:
-If the user wants help checking insurance, respond in a style like:
-"Got it — we can help with that. A roofing specialist can inspect the damage and help guide you through the insurance claim process."
+1. What roofing issue are you dealing with?
+2. Is there an active leak or water coming in?
+3. Was this caused by storm or weather damage?
+4. Have you filed an insurance claim or do you want help checking insurance?
+5. What type of property is this: residential or commercial?
+6. What type of roof is it, if you know? (shingle, tile, metal, flat, etc.)
+7. Roughly how old is the roof?
+8. What is the property address or city/zip?
+9. How urgent is this?
+10. What timeline are you aiming for?
+11. What is your name?
+12. What is your phone number?
+13. What is your email?
+14. Optional: do you have a rough budget in mind?
 
 URGENT RESPONSE STYLE:
-If the issue sounds urgent, respond in a style like:
-"That sounds urgent. Roof damage like this can get worse quickly, so let's get a few details so a roofing specialist can help as soon as possible."
+If the user sounds urgent, respond like:
+"That sounds urgent. Let’s get a few quick details so a roofing specialist can follow up fast."
 
-LEAD COMPLETION:
-After collecting their email address:
-1. Briefly confirm the information.
-2. Tell them a roofing specialist will call them shortly to schedule an inspection.
-3. If insurance help was requested, mention that they can help guide them through the insurance claim process.
-4. Encourage them to keep their phone nearby in case the contractor calls soon.
+INSURANCE RESPONSE STYLE:
+If the user mentions insurance, respond like:
+"Got it — we can help with that. A roofing specialist can inspect the damage and guide you through the insurance side."
 
 VERY IMPORTANT:
-When the lead is complete, add this block at the very end of your message exactly like this:
+When the lead is fully captured, end your final message with this exact block format:
 
-LEAD_CAPTURED
+LEAD CAPTURED
 Name: <name>
 Phone: <phone>
 Email: <email>
-Location: <location>
+Address: <address>
+Lead Type: <lead type>
+Property Type: <commercial or residential>
 Roof Type: <roof type>
-Issue: <issue>
+Roof Age: <roof age>
+Leak: <yes/no>
+Storm Damage: <yes/no>
+Insurance Claim: <yes/no>
 Urgency: <urgency>
-Insurance Status: <insurance status>
-Inspection Timing: <inspection timing>
-
-Do not ask more questions after LEAD_CAPTURED.
-MANDATORY CAPTURE RULE:
-Do not output LEAD_CAPTURED unless you have all of the following:
-- Name
-- Phone
-- Email
-- Location
-- Roof Type (if unknown, write "Unknown")
-- Issue
-- Urgency
-- Insurance Status
-- Inspection Timing
-
-If phone is missing, ask for the phone number.
-If email is missing, ask for the email address.
-Never finalize the lead without phone and email.
+Timeline: <timeline>
+Budget: <budget>
+Notes: <summary>
 """
 
 
@@ -598,6 +618,14 @@ Extra guidance:
         send_customer_confirmation_sms(name, phone)
 
     return {"ai_response": answer}
+
+def generate_inbound_reply(user_message: str, channel: str = "webchat") -> str:
+    """
+    Handles inbound messages from webchat, SMS, and calls
+    """
+    result = ask_ai(user_message)
+    return result["ai_response"]
+
 def read_all_leads():
     if not os.path.exists(LEADS_FILE):
         return []
@@ -868,5 +896,148 @@ def view_leads():
     </html>
     """
 
+@app.post("/api/chat/start")
+async def start_chat():
+    session_id = os.urandom(8).hex()
+    WEBCHAT_SESSIONS[session_id] = []
+    return {
+        "session_id": session_id,
+        "message": "Hi — what roofing issue are you dealing with today?"
+    }
+
+
+@app.post("/api/chat/message")
+async def chat_message(request: Request):
+    data = await request.json()
+    session_id = data.get("session_id")
+    message = data.get("message", "").strip()
+
+    if not session_id or session_id not in WEBCHAT_SESSIONS:
+        return {"error": "Invalid session"}
+
+    if not message:
+        return {"error": "Message required"}
+
+    WEBCHAT_SESSIONS[session_id].append(message)
+
+    ai_reply = generate_inbound_reply(message, channel="webchat")
+
+    WEBCHAT_SESSIONS[session_id].append(ai_reply)
+
+    return {"reply": ai_reply}
+
+
+@app.post("/twilio/sms")
+async def twilio_sms(request: Request):
+    form = await request.form()
+    from_number = str(form.get("From", "")).strip()
+    body = str(form.get("Body", "")).strip()
+
+    if from_number not in SMS_SESSIONS:
+        SMS_SESSIONS[from_number] = []
+
+    SMS_SESSIONS[from_number].append(body)
+
+    ai_reply = generate_inbound_reply(body, channel="sms")
+
+    SMS_SESSIONS[from_number].append(ai_reply)
+
+    twiml = MessagingResponse()
+    twiml.message(ai_reply)
+
+    return PlainTextResponse(str(twiml), media_type="application/xml")
+
+
+@app.post("/twilio/voice")
+async def twilio_voice():
+    response = VoiceResponse()
+
+    gather = Gather(
+        input="speech",
+        action="/twilio/voice/process",
+        method="POST",
+        speech_timeout="auto"
+    )
+    gather.say(
+        "Thanks for calling. Please briefly tell us what roofing issue you are dealing with.",
+        voice="alice"
+    )
+    response.append(gather)
+
+    response.say("We did not receive your message. Please call again.", voice="alice")
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+
+@app.post("/twilio/voice/process")
+async def twilio_voice_process(request: Request):
+    form = await request.form()
+    speech_result = str(form.get("SpeechResult", "")).strip()
+
+    ai_reply = generate_inbound_reply(
+        speech_result or "Caller did not provide details.",
+        channel="phone"
+    )
+
+    response = VoiceResponse()
+    response.say(ai_reply, voice="alice")
+    response.say("A roofing specialist will follow up shortly. Goodbye.", voice="alice")
+
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+@app.post("/twilio/sms")
+async def twilio_sms(request: Request):
+    form = await request.form()
+    from_number = str(form.get("From", "")).strip()
+    body = str(form.get("Body", "")).strip()
+
+    if from_number not in SMS_SESSIONS:
+        SMS_SESSIONS[from_number] = []
+
+    SMS_SESSIONS[from_number].append(body)
+
+    ai_reply = generate_inbound_reply(body, channel="sms")
+
+    SMS_SESSIONS[from_number].append(ai_reply)
+
+    twiml = MessagingResponse()
+    twiml.message(ai_reply)
+
+    return PlainTextResponse(str(twiml), media_type="application/xml")
+
+@app.post("/twilio/voice")
+async def twilio_voice():
+    response = VoiceResponse()
+
+    gather = Gather(
+        input="speech",
+        action="/twilio/voice/process",
+        method="POST",
+        speech_timeout="auto"
+    )
+    gather.say(
+        "Thanks for calling. Please briefly tell us what roofing issue you are dealing with.",
+        voice="alice"
+    )
+    response.append(gather)
+
+    response.say("We did not receive your message. Please call again.", voice="alice")
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+
+@app.post("/twilio/voice/process")
+async def twilio_voice_process(request: Request):
+    form = await request.form()
+    speech_result = str(form.get("SpeechResult", "")).strip()
+
+    ai_reply = generate_inbound_reply(
+        speech_result or "Caller did not provide details.",
+        channel="phone"
+    )
+
+    response = VoiceResponse()
+    response.say(ai_reply, voice="alice")
+    response.say("A roofing specialist will follow up shortly. Goodbye.", voice="alice")
+
+    return PlainTextResponse(str(response), media_type="application/xml")
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
