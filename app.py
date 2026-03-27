@@ -50,11 +50,19 @@ async def receive_lead(request: Request):
     message = data.get("message")
     urgency = data.get("urgency")
 
+    roof_type = data.get("roof_type")
+    active_leak = data.get("active_leak")
+    insurance_claim = data.get("insurance_claim")
+    budget = data.get("budget")
+    preferred_inspection_time = data.get("preferred_inspection_time")
+
+
     with open("leads.csv", "a") as f:
-        f.write(f"{name},{phone},{email},{location},{service},{message},{urgency}\n")
-
+        f.write(
+    f"{name},{phone},{email},{location},{service},{roof_type},{active_leak},"
+    f"{insurance_claim},{budget},{preferred_inspection_time},{message},{urgency}\n"
+)
     return {"message": "Lead submitted successfully"}
-
 LEADS_FILE = "leads.csv"
 BOOKING_LINK = "https://calendly.com/bookings-kazfen/30min"
 CONTRACTOR_ROUTES = {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kafzen Lead Form</title>
+<title>Kazfen Lead Form</title>
 
 <style>
 body {
@@ -68,6 +68,33 @@ button:hover {
             <option>Leak Inspection</option>
             <option>New Roof</option>
         </select>
+
+        <label>Roof Type</label>
+<select name="roof_type">
+    <option>Shingle</option>
+    <option>Tile</option>
+    <option>Metal</option>
+    <option>Flat</option>
+    <option>Other</option>
+</select>
+
+<label>Active Leak?</label>
+<select name="active_leak">
+    <option>No</option>
+    <option>Yes</option>
+</select>
+
+<label>Insurance Claim?</label>
+<select name="insurance_claim">
+    <option>No</option>
+    <option>Yes</option>
+</select>
+
+<label>Budget</label>
+<input type="text" name="budget" placeholder="Optional">
+
+<label>Preferred Inspection Time</label>
+<input type="text" name="preferred_inspection_time" placeholder="e.g. This week, mornings, ASAP">
 
         <label>Message</label>
         <textarea name="message"></textarea>
