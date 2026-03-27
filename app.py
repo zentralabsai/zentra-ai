@@ -56,7 +56,7 @@ async def receive_lead(request: Request):
     return {"message": "Lead submitted successfully"}
 
 LEADS_FILE = "leads.csv"
-
+BOOKING_LINK = "https://calendly.com/bookings-kazfen/30min"
 CONTRACTOR_ROUTES = {
     "miami": {
         "email": os.getenv("CONTRACTOR_MIAMI_EMAIL"),
@@ -100,7 +100,7 @@ def get_contractor_for_location(location: str) -> dict:
     }
 
 SYSTEM_PROMPT = """
-You are Kafzen, a high-converting AI roofing lead qualification assistant for a roofing company.
+You are Kazfen, a high-converting AI roofing lead qualification assistant for a roofing company.
 Your job is to qualify inbound roofing leads and collect the right information for the sales team.
 
 GOALS:
@@ -474,9 +474,12 @@ def send_customer_confirmation_sms(name: str, customer_phone: str):
         twilio_client = Client(twilio_sid, twilio_auth)
 
         sms_body = (
-            f"Hi {name}, thanks for contacting us. "
-            f"We received your roofing request and a specialist will reach out shortly."
-        )
+    f"Hi {name}, thanks for contacting Kazfen. "
+    f"Book your demo here: {BOOKING_LINK}"
+)
+
+
+
 
         message = twilio_client.messages.create(
             body=sms_body,
@@ -539,6 +542,7 @@ Extra guidance:
     answer = response.choices[0].message.content or ""
 
     if "LEAD_CAPTURED" in answer:
+        answer += f"\n\nBook your demo here: {BOOKING_LINK}"
         name = extract_field(answer, "Name")
         phone = extract_field(answer, "Phone")
         email = extract_field(answer, "Email")
