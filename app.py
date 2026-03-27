@@ -695,6 +695,15 @@ def update_status(index: int, status: str):
 @app.get("/leads", response_class=HTMLResponse)
 def view_leads():
     leads = read_all_leads()
+    total_leads = len(leads)
+    hot_leads = sum(1 for lead in leads if lead.get("lead_temperature", "") == "HOT")
+    warm_leads = sum(1 for lead in leads if lead.get("lead_temperature", "") == "WARM")
+    cold_leads = sum(1 for lead in leads if lead.get("lead_temperature", "") == "COLD")
+
+    contacted_leads = sum(1 for lead in leads if lead.get("status", "New") == "Contacted")
+    booked_leads = sum(1 for lead in leads if lead.get("status", "New") == "Inspection Booked")
+    won_leads = sum(1 for lead in leads if lead.get("status", "New") == "Won")
+    lost_leads = sum(1 for lead in leads if lead.get("status", "New") == "Lost")
     leads.reverse()
 
     rows = ""
@@ -817,6 +826,45 @@ def view_leads():
                 box-shadow: 0 8px 30px rgba(0,0,0,0.08);
                 overflow: hidden;
             }}
+
+                        .kpi-grid {{
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 16px;
+                margin-bottom: 20px;
+            }}
+            .kpi-card {{
+                background: white;
+                border-radius: 16px;
+                padding: 18px;
+                box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            }}
+            .kpi-label {{
+                color: #6b7280;
+                font-size: 13px;
+                font-weight: 700;
+                margin-bottom: 8px;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }}
+            .kpi-value {{
+                font-size: 28px;
+                font-weight: 800;
+                color: #111827;
+            }}
+
+            @media (max-width: 900px) {{
+    .kpi-grid {{
+        grid-template-columns: 1fr 1fr;
+    }}
+}}
+
+@media (max-width: 600px) {{
+    .kpi-grid {{
+        grid-template-columns: 1fr;
+    }}
+}}
+
             table {{
                 width: 100%;
                 border-collapse: collapse;
@@ -874,7 +922,16 @@ def view_leads():
                 </div>
                 <a class="btn" href="/">Back to Chat</a>
             </div>
-
+            <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Total Leads</div><div class="kpi-value">{total_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Hot Leads</div><div class="kpi-value">{hot_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Warm Leads</div><div class="kpi-value">{warm_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cold Leads</div><div class="kpi-value">{cold_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Contacted</div><div class="kpi-value">{contacted_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Booked</div><div class="kpi-value">{booked_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Won</div><div class="kpi-value">{won_leads}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Lost</div><div class="kpi-value">{lost_leads}</div></div>
+</div>
             <div class="card">
                 <div class="table-wrap">
                     <table>
