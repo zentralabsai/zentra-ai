@@ -711,6 +711,10 @@ def view_leads():
     booked_leads = sum(1 for lead in leads if lead.get("status", "New") == "Inspection Booked")
     won_leads = sum(1 for lead in leads if lead.get("status", "New") == "Won")
     lost_leads = sum(1 for lead in leads if lead.get("status", "New") == "Lost")
+    avg_job_value = 8000
+    close_rate = 0.30
+    pipeline_value = total_leads * avg_job_value
+    expected_revenue = int(pipeline_value * close_rate)
     leads.reverse()
 
     rows = ""
@@ -941,7 +945,26 @@ def view_leads():
     <div class="kpi-card"><div class="kpi-label">Booked</div><div class="kpi-value">{booked_leads}</div></div>
     <div class="kpi-card"><div class="kpi-label">Won</div><div class="kpi-value">{won_leads}</div></div>
     <div class="kpi-card"><div class="kpi-label">Lost</div><div class="kpi-value">{lost_leads}</div></div>
+    <div class="kpi-card">
+    <div class="kpi-label">Avg Job Value</div>
+    <div class="kpi-value">${avg_job_value:,}</div>
 </div>
+
+<div class="kpi-card">
+    <div class="kpi-label">Close Rate</div>
+    <div class="kpi-value">{int(close_rate * 100)}%</div>
+</div>
+
+<div class="kpi-card">
+    <div class="kpi-label">Pipeline Value</div>
+    <div class="kpi-value">${pipeline_value:,}</div>
+</div>
+
+<div class="kpi-card">
+    <div class="kpi-label">Expected Revenue</div>
+    <div class="kpi-value">${expected_revenue:,}</div>
+</div>
+    </div>
             <div class="card">
                 <div class="table-wrap">
                     <table>
