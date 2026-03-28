@@ -691,6 +691,14 @@ def update_status(index: int, status: str):
 
 # ---- YOUR LEADS DASHBOARD (ALREADY EXISTS BELOW) ----
 
+@app.get("/export-leads")
+def export_leads():
+    return FileResponse(
+        LEADS_FILE,
+        media_type="text/csv",
+        filename="kazfen-leads.csv"
+    )
+
 @app.get("/leads", response_class=HTMLResponse)
 def view_leads():
     leads = read_all_leads()
@@ -919,7 +927,10 @@ def view_leads():
                     <div class="title">Leads Dashboard</div>
                     <div class="sub">View and manage captured roofing leads</div>
                 </div>
-                <a class="btn" href="/">Back to Chat</a>
+                <div style="display:flex; gap:10px;">
+    <a class="btn" href="/export-leads">Export CSV</a>
+    <a class="btn" href="/">Back to Chat</a>
+</div>
             </div>
             <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-label">Total Leads</div><div class="kpi-value">{total_leads}</div></div>
