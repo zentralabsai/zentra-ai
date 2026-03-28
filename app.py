@@ -16,6 +16,23 @@ from twilio.twiml.messaging_response import MessagingResponse
 from twilio.twiml.voice_response import VoiceResponse, Gather
 import uuid
 load_dotenv()
+SMTP_SERVER = os.getenv("SMTP_SERVER")
+SMTP_PORT = int(os.getenv("SMTP_PORT"))
+SMTP_EMAIL = os.getenv("SMTP_EMAIL")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+def send_email(to_email, subject, body, from_email=None):
+    if from_email is None:
+        from_email = SMTP_EMAIL
+
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        server.send_message(msg)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -35,7 +52,14 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/", include_in_schema=False)
 def home():
     return FileResponse("static/index.html")
-
+@app.get("/test-email")
+def test_email():
+    send_email(
+        "yourpersonalemail@gmail.com",
+        "Kazfen Email Test",
+        "If you receive this, SMTP is working."
+    )
+    return {"status": "email sent"}
 from fastapi import Request
 
 @app.post("/api/lead")
