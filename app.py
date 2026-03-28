@@ -99,7 +99,7 @@ async def receive_lead(request: Request):
     status = "New"
 
     with open("leads.csv", "a") as f:
-    f.write(
+        f.write(
         f"{name},{phone},{email},{location},{roof_type},{issue},{urgency},"
         f"{insurance_status},{inspection_timing},{message},{lead_score},{lead_temperature},"
         f"{assigned_contractor},{status}\n"
