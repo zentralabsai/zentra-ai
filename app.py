@@ -99,11 +99,11 @@ async def receive_lead(request: Request):
     status = "New"
 
     with open("leads.csv", "a") as f:
-        f.write(
-            f"{name},{phone},{email},{location},{roof_type},{issue},{urgency},"
-            f"{insurance_status},{inspection_timing},{lead_score},{lead_temperature},"
-            f"{assigned_contractor},{status}\n"
-        )
+    f.write(
+        f"{name},{phone},{email},{location},{roof_type},{issue},{urgency},"
+        f"{insurance_status},{inspection_timing},{message},{lead_score},{lead_temperature},"
+        f"{assigned_contractor},{status}\n"
+    )
 
     return {"message": "Lead submitted successfully"}
 
@@ -795,6 +795,7 @@ def view_leads():
             <td>{lead.get("urgency", "")}</td>
             <td>{lead.get("insurance_status", "")}</td>
             <td>{lead.get("inspection_timing", "")}</td>
+            <td>{lead.get("message", "")}</td>
             <td>{lead.get("assigned_contractor", "")}</td>
             <td>{score}</td>
             <td>
@@ -1023,6 +1024,7 @@ def view_leads():
                                 <th>Urgency</th>
                                 <th>Insurance</th>
                                 <th>Inspection Timing</th>
+                                <th>Message</th>
                                 <th>Assigned Contractor</th>
                                 <th>Score</th>
                                 <th>Temperature</th>

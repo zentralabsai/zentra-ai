@@ -1,4 +1,4 @@
-name,phone,email,location,roof_type,issue,urgency,insurance_status,inspection_timing,lead_score,lead_temperature,assigned_contractor,status
+name,phone,email,location,roof_type,issue,urgency,insurance_status,inspection_timing,message,lead_score,lead_temperature,assigned_contractor,status
 Kinky Boy,616764757,gta00762@gmail.com,33156,Metal,General roof repair,Very,Needs help,ASAP,10,HOT
 Yulu,6767675757,ty@gmail.com,Miami,Tile,General roof repair,Not very,Not yet filed,Just researching,5,WARM
 Tuli,65758575,gta00762@gmail.com,444444,Tile,Missing shingles on your tile roof,Very urgent,Not yet filed,This week,7,WARM
