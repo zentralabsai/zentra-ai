@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from openai import OpenAI
@@ -687,8 +687,7 @@ def update_status(index: int, status: str):
     leads[index]["status"] = status
     write_all_leads(leads)
 
-    return {"success": True, "index": index, "status": status}
-
+    from fastapi.responses import RedirectResponse
 
 # ---- YOUR LEADS DASHBOARD (ALREADY EXISTS BELOW) ----
 
