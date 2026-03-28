@@ -68,27 +68,45 @@ from fastapi import Request
 async def receive_lead(request: Request):
     data = await request.json()
 
-    name = data.get("name")
-    phone = data.get("phone")
-    email = data.get("email")
-    location = data.get("location")
-    service = data.get("service")
-    message = data.get("message")
-    urgency = data.get("urgency")
+    name = data.get("name", "")
+    phone = data.get("phone", "")
+    email = data.get("email", "")
+    location = data.get("location", "")
+    service = data.get("service", "")
+    roof_type = data.get("roof_type", "")
+    active_leak = data.get("active_leak", "")
+    insurance_claim = data.get("insurance_claim", "")
+    budget = data.get("budget", "")
+    preferred_inspection_time = data.get("preferred_inspection_time", "")
+    message = data.get("message", "")
+    urgency = data.get("urgency", "")
 
-    roof_type = data.get("roof_type")
-    active_leak = data.get("active_leak")
-    insurance_claim = data.get("insurance_claim")
-    budget = data.get("budget")
-    preferred_inspection_time = data.get("preferred_inspection_time")
+    issue = service
+    insurance_status = insurance_claim
+    inspection_timing = preferred_inspection_time if preferred_inspection_time else "Not specified"
 
+    if str(urgency).lower() in ["high", "very urgent", "urgent", "asap"]:
+        lead_score = 9
+        lead_temperature = "HOT"
+    elif str(urgency).lower() in ["medium", "soon"]:
+        lead_score = 6
+        lead_temperature = "WARM"
+    else:
+        lead_score = 3
+        lead_temperature = "COLD"
+
+    assigned_contractor = "Default Contractor"
+    status = "New"
 
     with open("leads.csv", "a") as f:
         f.write(
-    f"{name},{phone},{email},{location},{service},{roof_type},{active_leak},"
-    f"{insurance_claim},{budget},{preferred_inspection_time},{message},{urgency}\n"
-)
+            f"{name},{phone},{email},{location},{roof_type},{issue},{urgency},"
+            f"{insurance_status},{inspection_timing},{lead_score},{lead_temperature},"
+            f"{assigned_contractor},{status}\n"
+        )
+
     return {"message": "Lead submitted successfully"}
+
 LEADS_FILE = "leads.csv"
 BOOKING_LINK = "https://calendly.com/bookings-kazfen/30min"
 CONTRACTOR_ROUTES = {
