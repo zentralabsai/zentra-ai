@@ -1188,24 +1188,26 @@ async def twilio_voice_process(request: Request):
 
     return PlainTextResponse(str(response), media_type="application/xml")
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+from fastapi.responses import RedirectResponse
+
 @app.get("/create-checkout-launch")
 def create_checkout_launch():
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
+        mode="subscription",
         line_items=[
             {
-                "price": os.getenv("STRIPE_LAUNCH_PRICE_ID"),
+                "price": "price_1TG32LCNb2u2ZxIIx4YaMYLG",  # Launch monthly €299
                 "quantity": 1,
             },
             {
-                "price": os.getenv("STRIPE_LAUNCH_SETUP_PRICE_ID"),
+                "price": "price_1TGGc6CNb2u2ZxIIMeH8wBo5",  # Launch setup fee
                 "quantity": 1,
             },
         ],
-        mode="subscription",
-        success_url="https://kazfen.com/success.html",
-        cancel_url="https://kazfen.com/cancel.html",
+        success_url="https://kazfen.com/static/success.html",
+        cancel_url="https://kazfen.com/static/pricing.html",
     )
     return RedirectResponse(session.url)
 
@@ -1214,18 +1216,22 @@ def create_checkout_launch():
 def create_checkout_growth():
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
+        mode="subscription",
         line_items=[
             {
-                "price": os.getenv("STRIPE_GROWTH_PRICE_ID"),
+                "price": "price_1TG345CNb2u2ZxII6Z8sx8A9",  # Growth monthly €999
                 "quantity": 1,
             },
             {
-                "price": os.getenv("STRIPE_GROWTH_SETUP_PRICE_ID"),
+                "price": "price_1TGGcfCNb2u2ZxIIjcmZF9xT",  # Growth setup fee
                 "quantity": 1,
             },
         ],
-        mode="subscription",
-        success_url="https://kazfen.com/success.html",
-        cancel_url="https://kazfen.com/cancel.html",
+        success_url="https://kazfen.com/static/success.html",
+        cancel_url="https://kazfen.com/static/pricing.html",
     )
     return RedirectResponse(session.url)
+
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+
