@@ -16,8 +16,9 @@ from twilio.twiml.messaging_response import MessagingResponse
 from twilio.twiml.voice_response import VoiceResponse, Gather
 import uuid
 import requests
+import stripe
 load_dotenv()
-
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
 def send_email(to_email, subject, body, from_email="notifications@kazfen.com"):
@@ -1188,3 +1189,43 @@ async def twilio_voice_process(request: Request):
     return PlainTextResponse(str(response), media_type="application/xml")
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+@app.get("/create-checkout-launch")
+def create_checkout_launch():
+    session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[
+            {
+                "price": os.getenv("STRIPE_LAUNCH_PRICE_ID"),
+                "quantity": 1,
+            },
+            {
+                "price": os.getenv("STRIPE_LAUNCH_SETUP_PRICE_ID"),
+                "quantity": 1,
+            },
+        ],
+        mode="subscription",
+        success_url="https://kazfen.com/success.html",
+        cancel_url="https://kazfen.com/cancel.html",
+    )
+    return RedirectResponse(session.url)
+
+
+@app.get("/create-checkout-growth")
+def create_checkout_growth():
+    session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[
+            {
+                "price": os.getenv("STRIPE_GROWTH_PRICE_ID"),
+                "quantity": 1,
+            },
+            {
+                "price": os.getenv("STRIPE_GROWTH_SETUP_PRICE_ID"),
+                "quantity": 1,
+            },
+        ],
+        mode="subscription",
+        success_url="https://kazfen.com/success.html",
+        cancel_url="https://kazfen.com/cancel.html",
+    )
+    return RedirectResponse(session.url)
