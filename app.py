@@ -1190,17 +1190,10 @@ async def twilio_voice_process(request: Request):
 
 
 from fastapi.responses import RedirectResponse
-
 import stripe
 import os
-from fastapi.responses import RedirectResponse
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
-LAUNCH_MONTHLY = os.getenv("STRIPE_LAUNCH_MONTHLY_PRICE_ID")
-LAUNCH_SETUP = os.getenv("STRIPE_LAUNCH_SETUP_PRICE_ID")
-GROWTH_MONTHLY = os.getenv("STRIPE_GROWTH_MONTHLY_PRICE_ID")
-GROWTH_SETUP = os.getenv("STRIPE_GROWTH_SETUP_PRICE_ID")
 
 
 @app.get("/create-checkout-launch")
@@ -1212,8 +1205,14 @@ def create_checkout_launch():
         payment_method_types=["card"],
         mode="subscription",
         line_items=[
-            {"price": LAUNCH_MONTHLY, "quantity": 1},
-            {"price": LAUNCH_SETUP, "quantity": 1},
+            {
+                "price": "price_1TGjAiCNb2u2ZxII4H24WZYs",  # Launch monthly
+                "quantity": 1,
+            },
+            {
+                "price": "price_1TGjEnCNb2u2ZxIICid5pdpC",  # Launch setup fee
+                "quantity": 1,
+            },
         ],
         success_url="https://kazfen.com/static/success.html",
         cancel_url="https://kazfen.com/static/pricing.html",
@@ -1230,8 +1229,14 @@ def create_checkout_growth():
         payment_method_types=["card"],
         mode="subscription",
         line_items=[
-            {"price": GROWTH_MONTHLY, "quantity": 1},
-            {"price": GROWTH_SETUP, "quantity": 1},
+            {
+                "price": "price_1TGjFoCNb2u2ZxIIS8OFuW17",  # Growth monthly
+                "quantity": 1,
+            },
+            {
+                "price": "price_1TGjGeCNb2u2ZxIIyhMn5JhZ",  # Growth setup fee
+                "quantity": 1,
+            },
         ],
         success_url="https://kazfen.com/static/success.html",
         cancel_url="https://kazfen.com/static/pricing.html",
