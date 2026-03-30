@@ -220,22 +220,294 @@
 .step-card p {
     color: #dbe4ff;
 }
+
+@media (max-width: 768px) {
+  .nav {
+    padding: 16px 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .brand {
+    font-size: 20px;
+    gap: 10px;
+  }
+
+  .brand img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .nav-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+  }
+
+  .nav-links a {
+    margin-left: 0;
+    font-size: 16px;
+  }
+}
+@media (max-width: 768px) {
+  .hero {
+    padding: 48px 20px 24px;
+    text-align: left;
+  }
+
+  .hero h1 {
+    font-size: 52px;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: 18px;
+  }
+
+  .hero p {
+    font-size: 17px;
+    line-height: 1.65;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-buttons,
+  .cta-row,
+  .hero-cta {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .hero-buttons a,
+  .cta-row a,
+  .hero-cta a,
+  .hero-buttons button,
+  .cta-row button,
+  .hero-cta button {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero {
+    margin-bottom: 28px;
+  }
+
+  .card,
+  .info-card,
+  .feature-card {
+    margin-top: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .card,
+  .info-card,
+  .feature-card {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+
+  .card h2,
+  .info-card h2,
+  .feature-card h2 {
+    font-size: 24px;
+    line-height: 1.2;
+    margin-bottom: 14px;
+  }
+
+  .card p,
+  .info-card p,
+  .feature-card p,
+  .card li,
+  .info-card li,
+  .feature-card li {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+}
+
+
+.menu-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 30px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .nav {
+    padding: 16px 20px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+  }
+
+  .brand {
+    font-size: 20px;
+    gap: 10px;
+  }
+
+  .brand img {
+    height: 32px;
+    width: 32px;
+    object-fit: contain;
+  }
+
+  .menu-toggle {
+    display: block;
+  }
+
+  .nav-links {
+    display: none;
+    position: absolute;
+    top: 72px;
+    left: 20px;
+    right: 20px;
+    background: rgba(11,16,32,0.98);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    z-index: 999;
+  }
+
+  .nav-links.show {
+    display: flex;
+  }
+
+  .nav-links a {
+    margin-left: 0;
+    font-size: 16px;
+    width: 100%;
+    padding: 8px 4px;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 48px 20px 28px;
+    gap: 24px;
+  }
+
+  .hero h1 {
+    font-size: 44px;
+    line-height: 1.02;
+    margin-bottom: 16px;
+  }
+
+  .hero p {
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  .hero-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hero-buttons a {
+    width: 100%;
+    text-align: center;
+  }
+
+  .card {
+    padding: 22px;
+    border-radius: 20px;
+  }
+
+  .card h2 {
+    font-size: 24px;
+  }
+
+  .card p,
+  .card li {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+}
+
+@media (max-width: 768px) {
+
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 48px 20px 28px;
+    gap: 24px;
+  }
+
+  .hero h1 {
+    font-size: 42px;
+    line-height: 1.05;
+  }
+
+  .hero p {
+    font-size: 17px;
+  }
+
+  .hero-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .hero-buttons a {
+    width: 100%;
+    text-align: center;
+  }
+
+  .nav {
+    padding: 16px 20px;
+  }
+
+  .card {
+    padding: 22px;
+  }
+
+  .card h3 {
+    font-size: 22px;
+  }
+
+  .card p,
+  .card li {
+    font-size: 16px;
+  }
+}
   </style>
 </head>
 <body>
   <nav class="nav">
-    <div class="brand">
-      <img src="/logo.png" style="height:50px; margin-right:10px; background:#11182b; padding:6px; border-radius:8px;">
-  <span>Kazfen</span>
-</div>
-    </div>
-    <div>
-  <a href="#features">Features</a>
-  <a href="#how">How it works</a>
-  <a href="/static/pricing.html">Pricing</a>
-  <a href="https://calendly.com/bookings-kazfen/30min" target="_blank">Book Demo</a>
-</div>
-  </nav>
+  <a class="brand" href="/">
+    <img src="/logo.png" alt="Kazfen logo">
+    <span>Kazfen</span>
+  </a>
+
+  <button class="menu-toggle" aria-label="Open menu" onclick="toggleMenu()">
+    ☰
+  </button>
+
+  <div class="nav-links" id="mobileMenu">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How it works</a>
+    <a href="/static/pricing.html">Pricing</a>
+    <a href="https://calendly.com/bookings-kazfen/30min" target="_blank">Book Demo</a>
+  </div>
+</nav>
 
   <section class="hero">
     <div>
@@ -244,7 +516,7 @@
         Kazfen captures, qualifies, routes, and follows up with inbound roofing leads in real time —
         so roofing companies close more jobs without losing speed.
       </p>
-      <div class="buttons">
+      <div class="hero-buttons">
         <a class="btn btn-primary" href="https://calendly.com/bookings-kazfen/30min" target="_blank">Book Demo</a>
         <a class="btn btn-secondary" href="#how">See how it works</a>
       </div>
@@ -384,5 +656,22 @@
   <footer>
     © 2026 Kazfen. AI infrastructure for roofing company growth.
   </footer>
+
+<script>
+  function toggleMenu() {
+    document.getElementById("mobileMenu").classList.toggle("show");
+  }
+
+  document.addEventListener("click", function (e) {
+    const menu = document.getElementById("mobileMenu");
+    const button = document.querySelector(".menu-toggle");
+
+    if (!menu.contains(e.target) && !button.contains(e.target)) {
+      menu.classList.remove("show");
+    }
+  });
+</script>
+
+
 </body>
 </html>
