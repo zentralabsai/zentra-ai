@@ -1191,6 +1191,13 @@ async def twilio_voice_process(request: Request):
 
 from fastapi.responses import RedirectResponse
 
+from fastapi.responses import RedirectResponse
+import stripe
+import os
+
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+
 @app.get("/create-checkout-launch")
 def create_checkout_launch():
     session = stripe.checkout.Session.create(
@@ -1198,11 +1205,11 @@ def create_checkout_launch():
         mode="subscription",
         line_items=[
             {
-                "price": "price_1TG32LCNb2u2ZxIIx4YaMYLG",  # Launch monthly €299
+                "price": "price_1TGjAiCNb2u2ZxII4H24WZYs",  # Launch monthly
                 "quantity": 1,
             },
             {
-                "price": "price_1TGGc6CNb2u2ZxIIMeH8wBo5",  # Launch setup fee
+                "price": "price_1TGjEnCNb2u2ZxIICid5pdpC",  # Launch setup fee
                 "quantity": 1,
             },
         ],
@@ -1219,11 +1226,11 @@ def create_checkout_growth():
         mode="subscription",
         line_items=[
             {
-                "price": "price_1TG345CNb2u2ZxII6Z8sx8A9",  # Growth monthly €999
+                "price": "price_1TGjFoCNb2u2ZxIIS8OFuW17",  # Growth monthly
                 "quantity": 1,
             },
             {
-                "price": "price_1TGGcfCNb2u2ZxIIjcmZF9xT",  # Growth setup fee
+                "price": "price_1TGjGeCNb2u2ZxIIyhMn5JhZ",  # Growth setup fee
                 "quantity": 1,
             },
         ],
@@ -1231,7 +1238,6 @@ def create_checkout_growth():
         cancel_url="https://kazfen.com/static/pricing.html",
     )
     return RedirectResponse(session.url)
-
 
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
