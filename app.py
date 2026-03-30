@@ -1262,14 +1262,38 @@ async def stripe_webhook(request: Request):
 
     print("Stripe event:", event["type"])
 
-    if event["type"] == "payment_intent.succeeded":
-        print("Payment succeeded")
+    # Checkout completed (new customer signup)
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_email = session.get("customer_details", {}).get("email")
+        subscription_id = session.get("subscription")
+        customer_id = session.get("customer")
 
+        print("New customer email:", customer_email)
+        print("Customer ID:", customer_id)
+        print("Subscription ID:", subscription_id)
+
+    # Recurring subscription payment successful
     elif event["type"] == "invoice.paid":
-        print("Subscription payment successful")
+        invoice = event["data"]["object"]
+        customer_id = invoice.get("customer")
+        subscription_id = invoice.get("subscription")
 
+        print("Invoice paid")
+        print("Customer:", customer_id)
+        print("Subscription:", subscription_id)
+
+    # Payment failed
     elif event["type"] == "invoice.payment_failed":
-        print("Payment failed")
+        invoice = event["data"]["object"]
+        customer_id = invoice.get("customer")
+
+        print("Payment failed for customer:", customer_id)
+
+    # Subscription cancelled
+    elif event["type"] == "customer.subscription.deleted":
+        subscription = event["data"]["object"]
+        print("Subscription cancelled:", subscription.get("id"))
 
     return {"status": "success"}
 
