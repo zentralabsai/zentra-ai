@@ -1232,6 +1232,37 @@ def create_checkout_growth():
     )
     return RedirectResponse(session.url)
 
+
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload,
+            sig_header,
+            STRIPE_WEBHOOK_SECRET
+        )
+    except Exception as e:
+        print("Webhook error:", e)
+        return {"status": "error"}
+
+    print("Stripe event:", event["type"])
+
+    if event["type"] == "payment_intent.succeeded":
+        print("Payment succeeded")
+
+    elif event["type"] == "invoice.paid":
+        print("Subscription payment successful")
+
+    elif event["type"] == "invoice.payment_failed":
+        print("Payment failed")
+
+    return {"status": "success"}
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 
