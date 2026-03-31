@@ -1,26 +1,40 @@
 name,phone,email,location,roof_type,issue,urgency,insurance_status,inspection_timing,message,lead_score,lead_temperature,assigned_contractor,status
-Kinky Boy,616764757,gta00762@gmail.com,33156,Metal,General roof repair,Very,Needs help,ASAP,10,HOT
-Yulu,6767675757,ty@gmail.com,Miami,Tile,General roof repair,Not very,Not yet filed,Just researching,5,WARM
-Tuli,65758575,gta00762@gmail.com,444444,Tile,Missing shingles on your tile roof,Very urgent,Not yet filed,This week,7,WARM
-Rolo,774774747,bdhdb@gmail.com,33156,flat,storm damage,very,no,asap,11,HOT
-Gaurav,6774747,yaus@gmail.com,33156,Tile,Active roof leak,Researching,Not filed,Just researching,7,WARM
-** Machigan,** 78775775,** machi@gmail.com,** 33156,** Tile,** Storm damage,** Not very urgent,** Not filed,** ASAP,13,HOT
-Ralph,+34616764757,gta00762@gmail.com,NYC,Unknown,Missing shingles,Very urgent,Not yet filed,Just researching for now,5,WARM
-Rolo,+34616764757,yui@gmail.com,33156,Flat,Missing shingles,Very urgent,Need help checking options,This week,9,HOT
-Raul,616764757,hui@gmail.com,33156,Flat,General roof repair,Not very urgent,Not filed,Tomorrow,9,HOT
-Randy,616764757,gta00762@gmail.com,Miami,Flat,Active roof leak,Very urgent,Not filed,ASAP,13,HOT
-Rolo,616764757,gta00762@gmail.com,33156,Tile,Missing tiles on your roof,Very urgent,"Not filed yet, but need help",ASAP,10,HOT
-Ralph,6167657575,alphie@gmail.com,LA,Tile,General roof repair,Very urgent,"Yes, help needed",ASAP,10,HOT
-Cindy,+34616764757,gta00762@gmail.com,** Miami,** Flat,General roof repair,** Very urgent,** Need help,** ASAP,10,HOT
-crawford,+15012036574,gta00762@gmail.com,33156,flat,Active roof leak,Very,Need help,ASAP,13,HOT
-Ralph,+15012036574,GTA00762@GMAIL.COM,33156,Tile,Storm damage,Not very urgent,No insurance claim filed,Just researching for now,10,HOT
-Raul Garcia,+34616764757,GTA00762@GMAIL.COM,33156,Flat,Slight leak,Not very urgent,Not yet filed,Just researching for now,8,HOT
-Cholo,+34616764757,GTA00762@GMAIL.COM,Miami,Tile,Active roof leak,Not very urgent,Not filed,Just researching,8,HOT
-** Randy Couture,** +34616764757,** GTA00762@GMAIL.COM,** 33156,** Unknown,** General roof repair,** Not urgent,** Not yet filed,** Just researching for now,5,WARM
-Mandy,+34616764757,GTA00762@GMAIL.COM,New York City,Unknown,"No specific issues, just researching",Future consideration,Not applicable,Researching for the future,2,COLD
-** Andu,** 616764757,** gta00762@gmail.com,** 33156,** Metal,** General roof repair,** Very urgent,** Not filed yet,** ASAP,10,HOT,Default Contractor,root.leads.bot@gmail.com,+15012036574
-Robert,616764757,gta00762@gmail.com,Miami,Tile,General roof repair,Very urgent,Need help,ASAP,10,HOT,Miami Contractor,root.leads.bot@gmail.com,+15012036574
-** Randy,** 616764757,** GTA00762@GMAIL.COM,** 33156,** Tile,** Storm damage,** Very urgent,** Yes,** ASAP,9,HOT,Default Contractor,root.leads.bot@gmail.com,+15012036574
-Randy,616764757,GTAYY@GMAIL.COM,Miami,Tile,Roof collapsed,Very,Need help,ASAP,13,HOT,Miami Contractor,root.leads.bot@gmail.com,+15012036574
-** Rolo,** +34616764757,** Gta00762@gmail.com,** Miami,** Tile,** Storm damage,** Very urgent,"** Yes, you’ve filed a claim",** ASAP,11,HOT,Miami Contractor,root.leads.bot@gmail.com,+15012036574
-Rolo,+34616764757,Gta00762@gmail.com,33156,Flat,Active roof leak,Very urgent,Yes,ASAP,9,HOT,Default Contractor,root.leads.bot@gmail.com,+15012036574
+Mike Johnson,2145557821,mike.johnson@gmail.com,Dallas TX,Shingle,Roof leak,High,Yes,ASAP,Water leaking into attic after storm,88,HOT,Dallas Roofing Co,New
+Sarah Martinez,5125551943,sarah.martinez@gmail.com,Austin TX,Tile,Roof inspection,Medium,No,This week,Buying house need inspection,62,WARM,Austin Roof Pros,Contacted
+David Thompson,7135556621,dthompson@yahoo.com,Houston TX,Shingle,Storm damage,High,Yes,ASAP,Shingles blown off after storm,91,HOT,Houston Roofing Group,Inspection Booked
+Chris Walker,6025558821,chriswalker@gmail.com,Phoenix AZ,Flat,Roof repair,Medium,No,Next week,Small leak in garage roof,55,WARM,Phoenix Roof Repair,New
+Robert Davis,4805552291,rdavis@gmail.com,Mesa AZ,Tile,Roof replacement,Low,No,Next month,Old roof needs replacement quote,48,COLD,Arizona Roofing,New
+James Wilson,3035558822,jwilson@gmail.com,Denver CO,Shingle,Hail damage,High,Yes,ASAP,Hail storm damaged roof,86,HOT,Denver Roofing Co,Contacted
+Anthony Garcia,7025559912,anthonygarcia@gmail.com,Las Vegas NV,Tile,Roof leak,Medium,No,This week,Leak near chimney,60,WARM,Vegas Roofing,New
+Mark Robinson,4695552231,markrob@gmail.com,Dallas TX,Shingle,Roof inspection,Medium,Yes,This week,Insurance inspection needed,72,HOT,Dallas Roofing Co,Inspection Booked
+Daniel Young,8325556677,danielyoung@gmail.com,Houston TX,Flat,Roof repair,Medium,No,Next week,Ponding water on flat roof,58,WARM,Houston Roofing Group,New
+Kevin King,8175553321,kevinking@gmail.com,Fort Worth TX,Shingle,Roof replacement,Low,No,Next month,Replacing 20 year old roof,45,COLD,Fort Worth Roofing,New
+Brian Clark,2145558833,bclark@gmail.com,Dallas TX,Metal,Roof repair,Medium,No,This week,Loose metal panels,63,WARM,Dallas Roofing Co,Contacted
+Steven Lewis,5125559911,slewis@gmail.com,Austin TX,Shingle,Storm damage,High,Yes,ASAP,Tree branch hit roof,89,HOT,Austin Roof Pros,Inspection Booked
+Paul Hernandez,7135554412,phernandez@gmail.com,Houston TX,Tile,Roof inspection,Low,No,Next month,General inspection,42,COLD,Houston Roofing Group,New
+Andrew Scott,6025551234,andrewscott@gmail.com,Phoenix AZ,Flat,Roof leak,High,No,ASAP,Water dripping inside office,84,HOT,Phoenix Roof Repair,Contacted
+Ryan Hall,4805558765,ryanhall@gmail.com,Mesa AZ,Tile,Roof repair,Medium,No,This week,Broken tiles after wind,59,WARM,Arizona Roofing,New
+Jason Green,3035552211,jgreen@gmail.com,Denver CO,Shingle,Hail damage,High,Yes,ASAP,Insurance claim hail damage,92,HOT,Denver Roofing Co,Inspection Booked
+Eric Adams,7025554455,eadams@gmail.com,Las Vegas NV,Tile,Roof replacement,Low,No,Next month,Planning roof replacement,47,COLD,Vegas Roofing,New
+Matthew Baker,4695557788,mbaker@gmail.com,Dallas TX,Shingle,Roof leak,Medium,No,This week,Leak in bedroom ceiling,64,WARM,Dallas Roofing Co,Contacted
+Justin Carter,8325553322,jcarter@gmail.com,Houston TX,Flat,Roof repair,Medium,No,Next week,Flat roof membrane issue,56,WARM,Houston Roofing Group,New
+Brandon Evans,8175559090,bevans@gmail.com,Fort Worth TX,Shingle,Storm damage,High,Yes,ASAP,Wind damaged shingles,87,HOT,Fort Worth Roofing,Inspection Booked
+Nicholas Turner,2145551111,nturner@gmail.com,Dallas TX,Metal,Roof inspection,Low,No,Next month,Pre-sale inspection,41,COLD,Dallas Roofing Co,New
+Kyle Parker,5125552222,kparker@gmail.com,Austin TX,Shingle,Roof repair,Medium,No,This week,Minor leak repair needed,61,WARM,Austin Roof Pros,Contacted
+Sean Edwards,7135553333,sedwards@gmail.com,Houston TX,Tile,Roof leak,High,Yes,ASAP,Leak after heavy rain,85,HOT,Houston Roofing Group,Inspection Booked
+Gregory Collins,6025554444,gcollins@gmail.com,Phoenix AZ,Flat,Roof replacement,Low,No,Next month,Commercial flat roof replacement,49,COLD,Phoenix Roof Repair,New
+Patrick Stewart,4805555555,pstewart@gmail.com,Mesa AZ,Tile,Roof repair,Medium,No,Next week,Tile repair needed,57,WARM,Arizona Roofing,New
+Frank Rogers,3035556666,frogers@gmail.com,Denver CO,Shingle,Hail damage,High,Yes,ASAP,Insurance hail claim,90,HOT,Denver Roofing Co,Contacted
+Henry Morris,7025557777,hmorris@gmail.com,Las Vegas NV,Tile,Roof inspection,Low,No,Next month,Routine inspection,43,COLD,Vegas Roofing,New
+Dylan Reed,4695558888,dreed@gmail.com,Dallas TX,Shingle,Roof repair,Medium,No,This week,Leak near vent pipe,65,WARM,Dallas Roofing Co,New
+Austin Cook,8325559999,acook@gmail.com,Houston TX,Flat,Roof leak,High,No,ASAP,Warehouse roof leaking,83,HOT,Houston Roofing Group,Inspection Booked
+Zachary Bell,8175551010,zbell@gmail.com,Fort Worth TX,Shingle,Roof replacement,Low,No,Next month,Quote for replacement,46,COLD,Fort Worth Roofing,New
+Aaron Bailey,2145552020,abailey@gmail.com,Dallas TX,Metal,Roof repair,Medium,No,Next week,Metal flashing repair,58,WARM,Dallas Roofing Co,Contacted
+Jose Ramirez,5125553030,jramirez@gmail.com,Austin TX,Shingle,Storm damage,High,Yes,ASAP,Storm damage insurance claim,88,HOT,Austin Roof Pros,Inspection Booked
+Luis Torres,7135554040,ltorres@gmail.com,Houston TX,Tile,Roof leak,Medium,No,This week,Leak after rainstorm,63,WARM,Houston Roofing Group,New
+Carlos Rivera,6025555050,crivera@gmail.com,Phoenix AZ,Flat,Roof repair,Medium,No,Next week,Flat roof repair needed,55,WARM,Phoenix Roof Repair,New
+Jorge Flores,4805556060,jflores@gmail.com,Mesa AZ,Tile,Roof inspection,Low,No,Next month,Buying house inspection,44,COLD,Arizona Roofing,New
+Miguel Gomez,3035557070,mgomez@gmail.com,Denver CO,Shingle,Hail damage,High,Yes,ASAP,Hail storm claim,91,HOT,Denver Roofing Co,Inspection Booked
+Rafael Diaz,7025558080,rdiaz@gmail.com,Las Vegas NV,Tile,Roof repair,Medium,No,This week,Tile roof repair,60,WARM,Vegas Roofing,Contacted
+Victor Cruz,4695559090,vcruz@gmail.com,Dallas TX,Shingle,Roof leak,High,No,ASAP,Leak in attic,84,HOT,Dallas Roofing Co,Inspection Booked
+Oscar Ortiz,8325551112,oortiz@gmail.com,Houston TX,Flat,Roof replacement,Low,No,Next month,Flat roof replacement quote,47,COLD,Houston Roofing Group,New
