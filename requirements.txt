@@ -7,3 +7,4 @@ requests
 pandas
 jinja2
 stripe
+itsdangerous
