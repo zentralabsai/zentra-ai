@@ -17,6 +17,10 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 import uuid
 import requests
 import stripe
+from fastapi import Form
+from fastapi.responses import RedirectResponse, HTMLResponse
+from starlette.middleware.sessions import SessionMiddleware
+
 load_dotenv()
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
@@ -48,6 +52,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+from starlette.middleware.sessions import SessionMiddleware
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="n53M+r9gA+B6Xrarun0p5w==",
+    same_site="lax",
+    https_only=True,
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -744,8 +756,46 @@ def export_leads():
         filename="kazfen-leads.csv"
     )
 
+ADMIN_USERNAME = "kazfenadmin"
+ADMIN_PASSWORD = "n53M+r9gA+B6Xrarun0p5w=="
+
+
+@app.get("/admin-login", response_class=HTMLResponse)
+def admin_login_page():
+    return """
+    <html>
+    <head>
+    <title>Admin Login</title>
+    </head>
+    <body style="font-family: sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; height:100vh;">
+        <form method="post" action="/admin-login" style="background:#111; padding:30px; border-radius:10px;">
+            <h2>Admin Login</h2>
+            <input name="username" placeholder="Username" style="display:block; margin-bottom:10px; padding:10px;" />
+            <input name="password" type="password" placeholder="Password" style="display:block; margin-bottom:10px; padding:10px;" />
+            <button type="submit" style="padding:10px;">Login</button>
+        </form>
+    </body>
+    </html>
+    """
+
+
+@app.post("/admin-login")
+def admin_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        request.session["admin_logged_in"] = True
+        return RedirectResponse(url="/leads", status_code=303)
+    return RedirectResponse(url="/admin-login", status_code=303)
+
+
+@app.get("/admin-logout")
+def admin_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/admin-login", status_code=303)
+
 @app.get("/leads", response_class=HTMLResponse)
-def view_leads():
+def view_leads(request: Request):
+    if not request.session.get("admin_logged_in"):
+        return RedirectResponse(url="/admin-login", status_code=303)
     leads = read_all_leads()
     total_leads = len(leads)
     hot_leads = sum(1 for lead in leads if lead.get("lead_temperature", "") == "HOT")
@@ -1193,24 +1243,18 @@ from fastapi.responses import RedirectResponse
 import stripe
 import os
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
-
 @app.get("/create-checkout-launch")
 def create_checkout_launch():
-    customer = stripe.Customer.create()
-
     session = stripe.checkout.Session.create(
-        customer=customer.id,
         payment_method_types=["card"],
         mode="subscription",
         line_items=[
             {
-                "price": "price_1TGjAiCNb2u2ZxII4H24WZYs",  # Launch monthly
+                "price": "price_1TG32LCNb2u2ZxIIx4YaMYLG",  # Launch monthly €299
                 "quantity": 1,
             },
             {
-                "price": "price_1TGjEnCNb2u2ZxIICid5pdpC",  # Launch setup fee
+                "price": "price_1TGGc6CNb2u2ZxIIMeH8wBo5",  # Launch setup fee
                 "quantity": 1,
             },
         ],
@@ -1222,19 +1266,16 @@ def create_checkout_launch():
 
 @app.get("/create-checkout-growth")
 def create_checkout_growth():
-    customer = stripe.Customer.create()
-
     session = stripe.checkout.Session.create(
-        customer=customer.id,
         payment_method_types=["card"],
         mode="subscription",
         line_items=[
             {
-                "price": "price_1TGjFoCNb2u2ZxIIS8OFuW17",  # Growth monthly
+                "price": "price_1TG345CNb2u2ZxII6Z8sx8A9",  # Growth monthly €999
                 "quantity": 1,
             },
             {
-                "price": "price_1TGjGeCNb2u2ZxIIyhMn5JhZ",  # Growth setup fee
+                "price": "price_1TGGcfCNb2u2ZxIIjcmZF9xT",  # Growth setup fee
                 "quantity": 1,
             },
         ],
@@ -1242,6 +1283,7 @@ def create_checkout_growth():
         cancel_url="https://kazfen.com/static/pricing.html",
     )
     return RedirectResponse(session.url)
+
 
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
