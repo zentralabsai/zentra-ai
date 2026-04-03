@@ -9,3 +9,4 @@ jinja2
 stripe
 itsdangerous
 python-multipart
+anthropic

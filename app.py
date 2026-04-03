@@ -123,6 +123,17 @@ async def receive_lead(request: Request):
         else:
             lead_temperature = "COLD"
 
+            # AI Qualification — overrides basic scoring if available
+    ai_result = ai_qualify_lead(
+        name=name, phone=phone, email=email, location=location,
+        roof_type=roof_type, issue=issue, urgency=urgency,
+        insurance_status=insurance_status, inspection_timing=inspection_timing,
+        message=message, weather_data=weather_data, hail_data=hail_data,
+    )
+    if ai_result:
+        lead_score = ai_result["score"]
+        lead_temperature = ai_result["temperature"]
+
     assigned_contractor = "Default Contractor"
     status = "New"
 
@@ -2211,6 +2222,206 @@ async def api_hail_monitor(request: Request):
 from fastapi.responses import RedirectResponse
 import stripe
 import os
+
+# ==============================================================================
+# KAZFEN UPGRADE #4: AI LEAD QUALIFICATION — CLAUDE API
+# ==============================================================================
+#
+# WHAT THIS DOES:
+# - Every lead gets analyzed by Claude for intelligent scoring
+# - Returns: score (1-10), temperature, qualification tags, recommended action
+# - Factors in weather, hail, urgency, location, insurance, roof type
+# - Way smarter than keyword matching — understands context and nuance
+# - Falls back to your existing scoring if API fails (zero downtime risk)
+#
+# SETUP:
+# 1. Go to https://console.anthropic.com/
+# 2. Create an API key
+# 3. Add to .env: ANTHROPIC_API_KEY=your_key_here
+# 4. Install: pip install anthropic
+#
+# NEW ENV VARIABLE:
+#     ANTHROPIC_API_KEY=your_api_key_here
+#
+# NEW DEPENDENCY:
+#     pip install anthropic
+#     (also add 'anthropic' to requirements.txt)
+#
+# PASTE LOCATION:
+# - Right AFTER your Upgrade #3 hail routes (/api/hail-monitor)
+# - BEFORE your Stripe checkout routes
+# ==============================================================================
+
+import anthropic
+
+
+def ai_qualify_lead(
+    name: str,
+    phone: str,
+    email: str,
+    location: str,
+    roof_type: str,
+    issue: str,
+    urgency: str,
+    insurance_status: str,
+    inspection_timing: str,
+    message: str = "",
+    weather_data: dict = None,
+    hail_data: dict = None,
+) -> dict:
+    """
+    Uses Claude to intelligently qualify and score a lead.
+    Returns structured scoring data.
+    Falls back to basic scoring if API fails.
+    """
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("AI QUALIFICATION SKIPPED: missing ANTHROPIC_API_KEY")
+        return None
+
+    # Build weather context
+    weather_context = "No weather data available."
+    if weather_data and weather_data.get("has_storm"):
+        details = ", ".join(weather_data.get("storm_details", []))
+        weather_context = f"ACTIVE STORM in lead's area: {details}. Severity: {weather_data.get('storm_severity', 'unknown')}."
+
+    hail_context = "No hail alerts."
+    if hail_data and hail_data.get("has_hail_alert"):
+        hail_context = f"ACTIVE HAIL ALERT: {hail_data.get('hail_size', 'unknown')} size hail. {hail_data.get('alert_count', 0)} active alerts."
+    elif hail_data and hail_data.get("has_severe_storm"):
+        hail_context = "Severe thunderstorm warning active (no confirmed hail yet)."
+
+    prompt = f"""You are a roofing lead qualification AI. Analyze this lead and return a JSON score.
+
+LEAD DATA:
+- Name: {name}
+- Phone: {phone}
+- Email: {email}
+- Location: {location}
+- Roof Type: {roof_type}
+- Issue: {issue}
+- Urgency: {urgency}
+- Insurance Status: {insurance_status}
+- Inspection Timing: {inspection_timing}
+- Additional Message: {message}
+
+WEATHER CONDITIONS:
+{weather_context}
+
+HAIL DATA:
+{hail_context}
+
+SCORING RULES:
+- Score 1-10 where 10 = highest value lead
+- Active leak + storm area + insurance = 9-10
+- Storm damage + wants inspection soon = 7-8
+- General repair + medium urgency = 5-6
+- Just browsing, no urgency = 1-3
+- Active hail in their area ALWAYS adds +2 to base score (capped at 10)
+- Insurance involvement ALWAYS adds +1
+- Commercial property ALWAYS adds +1
+
+QUALIFICATION TAGS (assign all that apply):
+- emergency, storm_damage, hail_damage, insurance_claim, full_replacement
+- repair, inspection, commercial, residential, high_value, time_sensitive
+
+RESPOND WITH ONLY THIS JSON, NO OTHER TEXT:
+{{
+    "score": <1-10>,
+    "temperature": "<HOT/WARM/COLD>",
+    "tags": ["tag1", "tag2"],
+    "recommended_action": "<one sentence: what the sales team should do>",
+    "reasoning": "<one sentence: why this score>"
+}}"""
+
+    try:
+        claude_client = anthropic.Anthropic(api_key=api_key)
+
+        response = claude_client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        reply = response.content[0].text.strip()
+
+        # Parse JSON from response
+        # Handle potential markdown code blocks
+        if reply.startswith("```"):
+            reply = reply.split("```")[1]
+            if reply.startswith("json"):
+                reply = reply[4:]
+            reply = reply.strip()
+
+        result = json.loads(reply)
+
+        # Validate required fields
+        score = min(max(int(result.get("score", 5)), 1), 10)
+        temperature = result.get("temperature", "WARM").upper()
+        if temperature not in ["HOT", "WARM", "COLD"]:
+            temperature = "WARM"
+
+        return {
+            "score": score,
+            "temperature": temperature,
+            "tags": result.get("tags", []),
+            "recommended_action": result.get("recommended_action", "Follow up within 24 hours"),
+            "reasoning": result.get("reasoning", "AI analysis complete"),
+            "ai_qualified": True,
+        }
+
+    except json.JSONDecodeError as e:
+        print(f"AI QUALIFICATION JSON ERROR: {e}")
+        print(f"Raw response: {reply}")
+        return None
+
+    except Exception as e:
+        print(f"AI QUALIFICATION ERROR: {e}")
+        return None
+
+
+# --- API ENDPOINT: Manually qualify/re-qualify a lead ---
+@app.post("/api/qualify-lead")
+async def api_qualify_lead(request: Request):
+    """
+    Manually trigger AI qualification for a lead.
+    POST /api/qualify-lead
+    Body: {"name": "...", "phone": "...", "location": "...", etc.}
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = await request.json()
+
+    # Get weather + hail for location
+    location = data.get("location", "")
+    weather_data = {}
+    hail_data = {}
+    if location:
+        weather_data = get_weather_for_location(location)
+        hail_data = get_nws_alerts_for_location(location)
+
+    result = ai_qualify_lead(
+        name=data.get("name", ""),
+        phone=data.get("phone", ""),
+        email=data.get("email", ""),
+        location=location,
+        roof_type=data.get("roof_type", ""),
+        issue=data.get("issue", ""),
+        urgency=data.get("urgency", ""),
+        insurance_status=data.get("insurance_status", ""),
+        inspection_timing=data.get("inspection_timing", ""),
+        message=data.get("message", ""),
+        weather_data=weather_data,
+        hail_data=hail_data,
+    )
+
+    if result:
+        return result
+    else:
+        return JSONResponse({"error": "AI qualification failed"}, status_code=500)
+
 
 @app.get("/create-checkout-launch")
 def create_checkout_launch():
