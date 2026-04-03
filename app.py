@@ -157,6 +157,23 @@ async def receive_lead(request: Request):
             lead_context=f"Form submission. Service: {service}. Urgency: {urgency}. Location: {location}.{storm_info}",
         )
 
+        # Auto-book inspection for qualified leads
+    contractor = get_contractor_for_location(location)
+    weather_context = ""
+    if weather_data.get("has_storm"):
+        weather_context = ", ".join(weather_data.get("storm_details", []))
+    if hail_data.get("has_hail_alert"):
+        weather_context += f" Hail: {hail_data.get('hail_size', 'confirmed')}"
+
+    auto_book_if_qualified(
+        lead_name=name, lead_phone=phone, lead_email=email,
+        lead_location=location, issue=issue, urgency=urgency,
+        insurance_status=insurance_status, inspection_timing=inspection_timing,
+        lead_score=lead_score, lead_temperature=lead_temperature,
+        contractor_label=contractor["label"], contractor_phone=contractor["phone"],
+        weather_context=weather_context,
+    )
+
     return {"message": "Lead submitted successfully"}
 
 LEADS_FILE = "leads.csv"
@@ -2421,6 +2438,400 @@ async def api_qualify_lead(request: Request):
         return result
     else:
         return JSONResponse({"error": "AI qualification failed"}, status_code=500)
+
+
+
+# ==============================================================================
+# KAZFEN UPGRADE #5: GOOGLE CALENDAR — AUTOMATIC INSPECTION BOOKING
+# ==============================================================================
+#
+# WHAT THIS DOES:
+# - Auto-books inspection slots for HOT leads
+# - Checks contractor calendar for availability
+# - Creates calendar events with full lead details
+# - Sends confirmation SMS to the lead with booking time
+# - API endpoint to check available slots
+# - API endpoint to manually book a slot from dashboard
+#
+# SETUP:
+# 1. Go to https://console.cloud.google.com/
+# 2. Create a new project (or use existing)
+# 3. Enable "Google Calendar API" (APIs & Services → Library → search "Calendar")
+# 4. Create a Service Account (APIs & Services → Credentials → Create Credentials → Service Account)
+# 5. Download the JSON key file
+# 6. Rename it to google-service-account.json
+# 7. Upload it to your project root (same folder as app.py)
+# 8. Share your Google Calendar with the service account email
+#    (it looks like: something@project-id.iam.gserviceaccount.com)
+#    Give it "Make changes to events" permission
+# 9. Update .env with your calendar ID
+#
+# ENV VARIABLES (update these — you already have placeholders):
+#     GOOGLE_CALENDAR_ID=your-calendar-id@group.calendar.google.com
+#     GOOGLE_SERVICE_ACCOUNT_FILE=google-service-account.json
+#     BOOKING_TIMEZONE=America/New_York
+#     BOOKING_SLOT_MINUTES=60
+#
+# NEW DEPENDENCIES:
+#     pip install google-api-python-client google-auth pytz
+#     (also add all three to requirements.txt)
+#
+# PASTE LOCATION:
+# - Right AFTER your Upgrade #4 AI qualification routes (/api/qualify-lead)
+# - BEFORE your Stripe checkout routes
+# ==============================================================================
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from datetime import datetime, timedelta
+import pytz
+
+def get_calendar_service():
+    """
+    Creates and returns an authenticated Google Calendar API service.
+    """
+    credentials_file = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "google-service-account.json")
+
+    if not os.path.exists(credentials_file):
+        print(f"CALENDAR ERROR: {credentials_file} not found")
+        return None
+
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            credentials_file,
+            scopes=["https://www.googleapis.com/auth/calendar"],
+        )
+        service = build("calendar", "v3", credentials=credentials)
+        return service
+    except Exception as e:
+        print(f"CALENDAR AUTH ERROR: {e}")
+        return None
+
+
+def get_available_slots(
+    date_str: str = None,
+    days_ahead: int = 5,
+    slot_minutes: int = None,
+) -> list:
+    """
+    Returns available booking slots for the next N days.
+    Checks the contractor's calendar and finds open windows.
+    """
+    service = get_calendar_service()
+    if not service:
+        return []
+
+    calendar_id = os.getenv("GOOGLE_CALENDAR_ID")
+    timezone_str = os.getenv("BOOKING_TIMEZONE", "America/New_York")
+    slot_minutes = slot_minutes or int(os.getenv("BOOKING_SLOT_MINUTES", "60"))
+
+    if not calendar_id:
+        print("CALENDAR ERROR: missing GOOGLE_CALENDAR_ID")
+        return []
+
+    tz = pytz.timezone(timezone_str)
+    now = datetime.now(tz)
+
+    if date_str:
+        try:
+            start_date = tz.localize(datetime.strptime(date_str, "%Y-%m-%d"))
+        except ValueError:
+            start_date = now + timedelta(days=1)
+    else:
+        start_date = now + timedelta(days=1)
+
+    end_date = start_date + timedelta(days=days_ahead)
+
+    business_start_hour = 8
+    business_end_hour = 17
+
+    try:
+        events_result = service.events().list(
+            calendarId=calendar_id,
+            timeMin=start_date.isoformat(),
+            timeMax=end_date.isoformat(),
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+
+        existing_events = events_result.get("items", [])
+
+        busy_times = []
+        for event in existing_events:
+            start = event.get("start", {})
+            end = event.get("end", {})
+            start_time = start.get("dateTime")
+            end_time = end.get("dateTime")
+
+            if start_time and end_time:
+                busy_start = datetime.fromisoformat(start_time)
+                busy_end = datetime.fromisoformat(end_time)
+                busy_times.append((busy_start, busy_end))
+
+        available_slots = []
+        current_date = start_date
+
+        while current_date < end_date:
+            if current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+                continue
+
+            slot_time = current_date.replace(
+                hour=business_start_hour, minute=0, second=0, microsecond=0
+            )
+            day_end = current_date.replace(
+                hour=business_end_hour, minute=0, second=0, microsecond=0
+            )
+
+            while slot_time + timedelta(minutes=slot_minutes) <= day_end:
+                slot_end = slot_time + timedelta(minutes=slot_minutes)
+
+                is_available = True
+                for busy_start, busy_end in busy_times:
+                    if slot_time < busy_end and slot_end > busy_start:
+                        is_available = False
+                        break
+
+                if slot_time > now and is_available:
+                    available_slots.append({
+                        "start": slot_time.isoformat(),
+                        "end": slot_end.isoformat(),
+                        "date": slot_time.strftime("%A, %B %d"),
+                        "time": slot_time.strftime("%I:%M %p"),
+                        "display": f"{slot_time.strftime('%A, %B %d at %I:%M %p')} ({timezone_str})",
+                    })
+
+                slot_time += timedelta(minutes=slot_minutes)
+
+            current_date += timedelta(days=1)
+
+        return available_slots
+
+    except Exception as e:
+        print(f"CALENDAR SLOTS ERROR: {e}")
+        return []
+
+
+def book_inspection(
+    lead_name: str,
+    lead_phone: str,
+    lead_email: str,
+    lead_location: str,
+    lead_issue: str,
+    lead_temperature: str,
+    slot_start: str,
+    slot_end: str = None,
+    contractor_label: str = "Roofing Specialist",
+) -> dict:
+    """
+    Books an inspection on the contractor's Google Calendar.
+    """
+    service = get_calendar_service()
+    if not service:
+        return {"success": False, "error": "Calendar service unavailable"}
+
+    calendar_id = os.getenv("GOOGLE_CALENDAR_ID")
+    timezone_str = os.getenv("BOOKING_TIMEZONE", "America/New_York")
+    slot_minutes = int(os.getenv("BOOKING_SLOT_MINUTES", "60"))
+
+    if not calendar_id:
+        return {"success": False, "error": "No calendar ID configured"}
+
+    try:
+        start_dt = datetime.fromisoformat(slot_start)
+
+        if slot_end:
+            end_dt = datetime.fromisoformat(slot_end)
+        else:
+            end_dt = start_dt + timedelta(minutes=slot_minutes)
+
+        event = {
+            "summary": f"Roof Inspection — {lead_name} [{lead_temperature}]",
+            "location": lead_location,
+            "description": (
+                f"KAZFEN AUTO-BOOKED INSPECTION\n\n"
+                f"Lead: {lead_name}\n"
+                f"Phone: {lead_phone}\n"
+                f"Email: {lead_email}\n"
+                f"Location: {lead_location}\n"
+                f"Issue: {lead_issue}\n"
+                f"Temperature: {lead_temperature}\n"
+                f"Assigned: {contractor_label}\n\n"
+                f"— Auto-booked by Kazfen AI"
+            ),
+            "start": {
+                "dateTime": start_dt.isoformat(),
+                "timeZone": timezone_str,
+            },
+            "end": {
+                "dateTime": end_dt.isoformat(),
+                "timeZone": timezone_str,
+            },
+            "reminders": {
+                "useDefault": False,
+                "overrides": [
+                    {"method": "popup", "minutes": 60},
+                    {"method": "popup", "minutes": 15},
+                ],
+            },
+        }
+
+        if lead_email and "@" in lead_email:
+            event["attendees"] = [{"email": lead_email}]
+
+        created_event = service.events().insert(
+            calendarId=calendar_id,
+            body=event,
+            sendUpdates="all",
+        ).execute()
+
+        booking_time = start_dt.strftime("%A, %B %d at %I:%M %p")
+
+        return {
+            "success": True,
+            "event_id": created_event.get("id"),
+            "event_link": created_event.get("htmlLink"),
+            "booking_time": booking_time,
+            "timezone": timezone_str,
+        }
+
+    except Exception as e:
+        print(f"BOOKING ERROR: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def auto_book_hot_lead(
+    lead_name: str,
+    lead_phone: str,
+    lead_email: str,
+    lead_location: str,
+    lead_issue: str,
+    lead_temperature: str,
+    contractor_label: str = "Roofing Specialist",
+) -> dict:
+    """
+    Automatically books the next available slot for HOT leads.
+    Sends confirmation SMS to the lead.
+    """
+    if lead_temperature not in ["HOT"]:
+        return {"success": False, "reason": "Auto-booking only for HOT leads"}
+
+    slots = get_available_slots(days_ahead=3)
+    if not slots:
+        print("AUTO-BOOK: No available slots found")
+        return {"success": False, "reason": "No available slots"}
+
+    next_slot = slots[0]
+    result = book_inspection(
+        lead_name=lead_name,
+        lead_phone=lead_phone,
+        lead_email=lead_email,
+        lead_location=lead_location,
+        lead_issue=lead_issue,
+        lead_temperature=lead_temperature,
+        slot_start=next_slot["start"],
+        slot_end=next_slot["end"],
+        contractor_label=contractor_label,
+    )
+
+    if result.get("success") and lead_phone:
+        try:
+            twilio_sid = os.getenv("TWILIO_SID")
+            twilio_auth = os.getenv("TWILIO_AUTH")
+            twilio_number = os.getenv("TWILIO_NUMBER")
+
+            if twilio_sid and twilio_auth and twilio_number:
+                twilio_client = Client(twilio_sid, twilio_auth)
+
+                clean_phone = re.sub(r"[^\d+]", "", lead_phone)
+                if not clean_phone.startswith("+"):
+                    if len(clean_phone) == 10:
+                        clean_phone = "+1" + clean_phone
+                    elif len(clean_phone) == 11 and clean_phone.startswith("1"):
+                        clean_phone = "+" + clean_phone
+
+                sms_body = (
+                    f"Hi {lead_name}, your roof inspection has been booked for "
+                    f"{result['booking_time']} ({result['timezone']}). "
+                    f"A roofing specialist will be at {lead_location}. "
+                    f"Reply to this message if you need to reschedule. — Kazfen"
+                )
+
+                twilio_client.messages.create(
+                    body=sms_body,
+                    from_=twilio_number,
+                    to=clean_phone,
+                )
+                print(f"BOOKING SMS SENT to {clean_phone}")
+
+        except Exception as e:
+            print(f"BOOKING SMS ERROR: {e}")
+
+    return result
+
+
+# --- API ENDPOINT: Get available slots ---
+@app.get("/api/calendar/slots")
+async def api_calendar_slots(days_ahead: int = 5):
+    """
+    GET /api/calendar/slots?days_ahead=5
+    """
+    slots = get_available_slots(days_ahead=days_ahead)
+    return {
+        "available_slots": len(slots),
+        "slots": slots[:20],
+    }
+
+
+# --- API ENDPOINT: Book an inspection manually ---
+@app.post("/api/calendar/book")
+async def api_calendar_book(request: Request):
+    """
+    POST /api/calendar/book
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = await request.json()
+
+    result = book_inspection(
+        lead_name=data.get("name", "Lead"),
+        lead_phone=data.get("phone", ""),
+        lead_email=data.get("email", ""),
+        lead_location=data.get("location", ""),
+        lead_issue=data.get("issue", "Inspection"),
+        lead_temperature=data.get("temperature", "WARM"),
+        slot_start=data.get("slot_start", ""),
+        contractor_label=data.get("contractor", "Roofing Specialist"),
+    )
+
+    return result
+
+
+# --- API ENDPOINT: Auto-book next available for a lead ---
+@app.post("/api/calendar/auto-book")
+async def api_calendar_auto_book(request: Request):
+    """
+    POST /api/calendar/auto-book
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = await request.json()
+
+    result = auto_book_hot_lead(
+        lead_name=data.get("name", "Lead"),
+        lead_phone=data.get("phone", ""),
+        lead_email=data.get("email", ""),
+        lead_location=data.get("location", ""),
+        lead_issue=data.get("issue", "Inspection"),
+        lead_temperature=data.get("temperature", "HOT"),
+        contractor_label=data.get("contractor", "Roofing Specialist"),
+    )
+
+    return result
 
 
 @app.get("/create-checkout-launch")

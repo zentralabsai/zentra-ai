@@ -10,3 +10,6 @@ stripe
 itsdangerous
 python-multipart
 anthropic
+google-auth
+google-api-python-client
+pytz
