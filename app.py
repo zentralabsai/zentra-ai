@@ -174,6 +174,14 @@ async def receive_lead(request: Request):
         weather_context=weather_context,
     )
 
+    send_smart_confirmation_sms(
+        name=name,
+        phone=phone,
+        issue=issue,
+        urgency=urgency,
+        lead_temperature=lead_temperature,
+    )
+
     return {"message": "Lead submitted successfully"}
 
 LEADS_FILE = "leads.csv"
@@ -1578,6 +1586,13 @@ async def twilio_sms(request: Request):
     from_number = str(form.get("From", "")).strip()
     body = str(form.get("Body", "")).strip()
 
+    # Handle opt-out
+    if body.upper() in ["STOP", "UNSUBSCRIBE", "CANCEL", "QUIT"]:
+        opt_out_phone(from_number)
+        twiml = MessagingResponse()
+        twiml.message("You've been unsubscribed from Kazfen messages. Reply START to re-subscribe.")
+        return PlainTextResponse(str(twiml), media_type="application/xml")
+
     if from_number not in SMS_SESSIONS:
         SMS_SESSIONS[from_number] = []
 
@@ -2832,6 +2847,315 @@ async def api_calendar_auto_book(request: Request):
     )
 
     return result
+
+
+# ==============================================================================
+# KAZFEN UPGRADE #6: TWILIO SMS UPGRADES
+# ==============================================================================
+#
+# WHAT THIS DOES:
+# - Smarter customer confirmation SMS with lead-specific details
+# - Auto follow-up SMS for leads that haven't responded (24hr, 48hr)
+# - Two-way SMS: leads can reply and get AI responses
+# - Booking confirmation via SMS when inspection is auto-booked
+# - Storm alert SMS to leads in affected areas
+# - Opt-out handling (STOP keyword)
+#
+# NO NEW ENV VARIABLES NEEDED — uses your existing Twilio setup
+#
+# PASTE LOCATION:
+# - Right AFTER your Upgrade #5 Google Calendar routes
+# - BEFORE your Stripe checkout routes
+# ==============================================================================
+
+
+# --- SMS OPT-OUT TRACKING ---
+SMS_OPT_OUTS = set()  # In production, store this in a database
+
+
+def is_opted_out(phone: str) -> bool:
+    """Check if a phone number has opted out of SMS."""
+    clean = re.sub(r"[^\d+]", "", phone)
+    return clean in SMS_OPT_OUTS
+
+
+def opt_out_phone(phone: str):
+    """Add phone to opt-out list."""
+    clean = re.sub(r"[^\d+]", "", phone)
+    SMS_OPT_OUTS.add(clean)
+    print(f"SMS OPT-OUT: {clean}")
+
+
+def send_smart_confirmation_sms(
+    name: str,
+    phone: str,
+    issue: str,
+    urgency: str,
+    lead_temperature: str,
+    booking_info: dict = None,
+):
+    """
+    Sends a smarter confirmation SMS based on lead context.
+    Different messages for HOT vs WARM vs COLD leads.
+    Includes booking info if auto-booked.
+    """
+    if is_opted_out(phone):
+        print(f"SMS SKIPPED (opted out): {phone}")
+        return
+
+    try:
+        twilio_sid = os.getenv("TWILIO_SID")
+        twilio_auth = os.getenv("TWILIO_AUTH")
+        twilio_number = os.getenv("TWILIO_NUMBER")
+
+        if not all([twilio_sid, twilio_auth, twilio_number, phone]):
+            print("SMART SMS SKIPPED: missing env vars")
+            return
+
+        twilio_client = Client(twilio_sid, twilio_auth)
+
+        # Build contextual message
+        if booking_info:
+            sms_body = (
+                f"Hi {name}, thanks for reaching out to Kazfen! "
+                f"Your roof inspection is confirmed for "
+                f"{booking_info['date']} at {booking_info['time']}. "
+                f"A specialist will arrive at your property. "
+                f"Reply to this number with any questions. — Kazfen"
+            )
+        elif lead_temperature == "HOT":
+            sms_body = (
+                f"Hi {name}, we received your roofing request and it's been "
+                f"marked as high priority. A roofing specialist will call you "
+                f"within the next 30 minutes. If urgent, reply here. — Kazfen"
+            )
+        elif lead_temperature == "WARM":
+            sms_body = (
+                f"Hi {name}, thanks for contacting Kazfen about your roof. "
+                f"A specialist will follow up within a few hours. "
+                f"Reply here if you have any questions. — Kazfen"
+            )
+        else:
+            sms_body = (
+                f"Hi {name}, thanks for your interest in Kazfen roofing services. "
+                f"We'll be in touch soon. Reply here anytime. — Kazfen"
+            )
+
+        message = twilio_client.messages.create(
+            body=sms_body,
+            from_=twilio_number,
+            to=phone,
+        )
+        print(f"SMART CONFIRMATION SMS sent: {message.sid}")
+
+    except Exception as e:
+        print(f"SMART SMS ERROR: {e}")
+
+
+def send_storm_alert_sms(
+    phone: str,
+    name: str,
+    location: str,
+    storm_details: str,
+):
+    """
+    Sends storm alert SMS to leads in affected areas.
+    Great for re-engaging cold leads after a storm hits their area.
+    """
+    if is_opted_out(phone):
+        return
+
+    try:
+        twilio_sid = os.getenv("TWILIO_SID")
+        twilio_auth = os.getenv("TWILIO_AUTH")
+        twilio_number = os.getenv("TWILIO_NUMBER")
+
+        if not all([twilio_sid, twilio_auth, twilio_number, phone]):
+            return
+
+        twilio_client = Client(twilio_sid, twilio_auth)
+
+        sms_body = (
+            f"Hi {name}, severe weather ({storm_details}) has been reported "
+            f"near {location}. If your roof sustained any damage, reply YES "
+            f"for a free inspection. — Kazfen Roofing"
+        )
+
+        message = twilio_client.messages.create(
+            body=sms_body,
+            from_=twilio_number,
+            to=phone,
+        )
+        print(f"STORM ALERT SMS sent: {message.sid}")
+
+    except Exception as e:
+        print(f"STORM ALERT SMS ERROR: {e}")
+
+
+def send_follow_up_sms(
+    phone: str,
+    name: str,
+    follow_up_type: str = "24hr",
+):
+    """
+    Sends follow-up SMS to leads that haven't responded.
+    """
+    if is_opted_out(phone):
+        return
+
+    try:
+        twilio_sid = os.getenv("TWILIO_SID")
+        twilio_auth = os.getenv("TWILIO_AUTH")
+        twilio_number = os.getenv("TWILIO_NUMBER")
+
+        if not all([twilio_sid, twilio_auth, twilio_number, phone]):
+            return
+
+        twilio_client = Client(twilio_sid, twilio_auth)
+
+        if follow_up_type == "24hr":
+            sms_body = (
+                f"Hi {name}, just following up on your roofing inquiry. "
+                f"Do you still need help? Reply YES to schedule a free inspection. — Kazfen"
+            )
+        elif follow_up_type == "48hr":
+            sms_body = (
+                f"Hi {name}, we want to make sure your roof is taken care of. "
+                f"Reply YES and we'll get a specialist out to you this week. — Kazfen"
+            )
+        else:
+            sms_body = (
+                f"Hi {name}, last check-in from Kazfen. If you still need roofing help, "
+                f"reply anytime. We're here when you're ready. — Kazfen"
+            )
+
+        message = twilio_client.messages.create(
+            body=sms_body,
+            from_=twilio_number,
+            to=phone,
+        )
+        print(f"FOLLOW-UP SMS ({follow_up_type}) sent: {message.sid}")
+
+    except Exception as e:
+        print(f"FOLLOW-UP SMS ERROR: {e}")
+
+
+# --- API ENDPOINT: Send storm alerts to leads in a specific area ---
+@app.post("/api/send-storm-alerts")
+async def api_send_storm_alerts(request: Request):
+    """
+    Send storm alert SMS to all leads in a specific location.
+    POST /api/send-storm-alerts
+    Body: {"location": "Kansas City, MO"}
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = await request.json()
+    target_location = data.get("location", "").lower()
+
+    if not target_location:
+        return JSONResponse({"error": "Location required"}, status_code=400)
+
+    # Check if there's actually a storm
+    weather = get_weather_for_location(target_location)
+    hail = get_nws_alerts_for_location(target_location)
+
+    storm_details = ""
+    if weather.get("has_storm"):
+        storm_details = ", ".join(weather.get("storm_details", []))
+    if hail.get("has_hail_alert"):
+        storm_details += f", hail ({hail.get('hail_size', 'confirmed')})"
+
+    if not storm_details:
+        return {"message": "No active storms in this area", "alerts_sent": 0}
+
+    # Read all leads and find matches
+    leads = read_all_leads()
+    alerts_sent = 0
+
+    for lead in leads:
+        lead_location = (lead.get("location", "") or "").lower()
+        if target_location in lead_location or lead_location in target_location:
+            phone = lead.get("phone", "")
+            name = lead.get("name", "")
+            if phone and name:
+                send_storm_alert_sms(
+                    phone=phone,
+                    name=name,
+                    location=lead.get("location", target_location),
+                    storm_details=storm_details,
+                )
+                alerts_sent += 1
+
+    return {
+        "message": f"Storm alerts sent to {alerts_sent} leads in {target_location}",
+        "alerts_sent": alerts_sent,
+        "storm_details": storm_details,
+    }
+
+
+# --- API ENDPOINT: Send follow-up to a specific lead ---
+@app.post("/api/send-followup")
+async def api_send_followup(request: Request):
+    """
+    Send follow-up SMS to a specific lead.
+    POST /api/send-followup
+    Body: {"phone": "+1...", "name": "John", "type": "24hr"}
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = await request.json()
+    phone = data.get("phone", "")
+    name = data.get("name", "there")
+    follow_up_type = data.get("type", "24hr")
+
+    if not phone:
+        return JSONResponse({"error": "Phone required"}, status_code=400)
+
+    send_follow_up_sms(phone=phone, name=name, follow_up_type=follow_up_type)
+
+    return {"message": f"Follow-up ({follow_up_type}) sent to {phone}"}
+
+
+# --- API ENDPOINT: Bulk follow-up to all leads with a specific status ---
+@app.post("/api/bulk-followup")
+async def api_bulk_followup(request: Request):
+    """
+    Send follow-up SMS to all leads with a given status.
+    POST /api/bulk-followup
+    Body: {"status": "New", "type": "24hr"}
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = await request.json()
+    target_status = data.get("status", "New")
+    follow_up_type = data.get("type", "24hr")
+
+    leads = read_all_leads()
+    sent_count = 0
+
+    for lead in leads:
+        if lead.get("status", "New") == target_status:
+            phone = lead.get("phone", "")
+            name = lead.get("name", "there")
+            if phone:
+                send_follow_up_sms(
+                    phone=phone,
+                    name=name,
+                    follow_up_type=follow_up_type,
+                )
+                sent_count += 1
+
+    return {
+        "message": f"Sent {follow_up_type} follow-up to {sent_count} leads with status '{target_status}'",
+        "sent_count": sent_count,
+    }
 
 
 @app.get("/create-checkout-launch")
