@@ -102,21 +102,23 @@ async def receive_lead(request: Request):
 
     weather_data = {}
     storm_boost = 0
+    hail_boost = 0
     if location:
         weather_data = get_weather_for_location(location)
         storm_boost = get_storm_score_boost(weather_data)
-
+        hail_data = get_nws_alerts_for_location(location)
+        hail_boost = get_hail_score_boost(hail_data)
     if str(urgency).lower() in ["high", "very urgent", "urgent", "asap"]:
-        lead_score = 9 + storm_boost
+        lead_score = 9 + storm_boost + hail_boost
         lead_temperature = "HOT"
     elif str(urgency).lower() in ["medium", "soon"]:
-        lead_score = 6 + storm_boost
-        lead_temperature = "HOT" if (6 + storm_boost) >= 8 else "WARM"
+        lead_score = 6 + storm_boost + hail_boost
+        lead_temperature = "HOT" if (6 + storm_boost + hail_boost) >= 8 else "WARM"
     else:
-        lead_score = 3 + storm_boost
-        if (3 + storm_boost) >= 8:
+        lead_score = 3 + storm_boost + hail_boost
+        if (3 + storm_boost + hail_boost) >= 8:
             lead_temperature = "HOT"
-        elif (3 + storm_boost) >= 5:
+        elif (3 + storm_boost + hail_boost) >= 5:
             lead_temperature = "WARM"
         else:
             lead_temperature = "COLD"
@@ -135,6 +137,8 @@ async def receive_lead(request: Request):
         storm_info = ""
         if weather_data.get("has_storm"):
             storm_info = f" ACTIVE STORM: {', '.join(weather_data.get('storm_details', []))}"
+        if hail_data.get("has_hail_alert"):
+            storm_info += f" HAIL ALERT: {hail_data.get('hail_size', 'confirmed')} size hail"
         trigger_outbound_call(
             lead_phone=phone,
             lead_name=name,
@@ -1829,6 +1833,377 @@ async def api_storm_monitor(request: Request):
     return {
         "markets_checked": len(results),
         "active_storms": len(active_storms),
+        "results": results,
+    }
+
+# ==============================================================================
+# KAZFEN UPGRADE #3: HAIL DATA API — NWS ALERTS INTEGRATION
+# ==============================================================================
+#
+# WHAT THIS DOES:
+# - Checks NWS (National Weather Service) for active hail/severe weather alerts
+# - Returns hail size, alert severity, and affected areas
+# - Auto-boosts lead score when hail is detected in their area
+# - Stacks ON TOP of Upgrade #2 (Tomorrow.io) for double weather intelligence
+# - New endpoint to check hail alerts for any location
+# - Hail monitor for all your target markets
+#
+# WHY NWS:
+# - 100% FREE — no API key, no signup, no limits
+# - Official US government severe weather data
+# - Includes hail size in warnings (penny, quarter, golf ball, etc.)
+# - Real-time alerts with affected zones
+# - HailTrace/CoreLogic require enterprise contracts ($$$)
+#
+# SETUP:
+# - No API key needed. No signup needed. Just paste and go.
+#
+# PASTE LOCATION:
+# - Right AFTER your Upgrade #2 weather routes (/api/storm-monitor)
+# - BEFORE your Stripe checkout routes
+# ==============================================================================
+
+
+import json
+
+# --- NWS HAIL ALERT SEVERITY MAPPING ---
+HAIL_SIZE_SCORES = {
+    "quarter": 3,      # 1" hail — roof damage likely
+    "half dollar": 3,
+    "ping pong": 4,    # 1.5" — definite roof damage
+    "golf": 4,         # 1.75" — significant damage
+    "tennis": 5,       # 2.5" — severe damage
+    "baseball": 5,     # 2.75" — extreme damage
+    "softball": 5,     # 4"+ — catastrophic
+}
+
+NWS_CACHE = {}
+NWS_CACHE_TTL = 900  # 15 minutes
+
+
+def geocode_location_to_coords(location: str) -> dict:
+    """
+    Converts a city/state or zip code to lat/lon using the US Census geocoder.
+    Free, no API key needed.
+    """
+    try:
+        # Try zip code first
+        clean = location.strip()
+        if clean.isdigit() and len(clean) == 5:
+            url = f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={clean}&benchmark=Public_AR_Current&format=json"
+        else:
+            url = f"https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address={clean}&benchmark=Public_AR_Current&format=json"
+
+        resp = requests.get(url, timeout=8)
+        if resp.status_code != 200:
+            return {}
+
+        data = resp.json()
+        matches = data.get("result", {}).get("addressMatches", [])
+        if not matches:
+            return {}
+
+        coords = matches[0].get("coordinates", {})
+        return {
+            "lat": coords.get("y", 0),
+            "lon": coords.get("x", 0),
+        }
+    except Exception as e:
+        print(f"GEOCODE ERROR: {e}")
+        return {}
+
+
+def get_nws_alerts_for_location(location: str) -> dict:
+    """
+    Fetches active NWS alerts (hail, severe thunderstorm, tornado) for a location.
+    Uses the free NWS API — no key needed.
+    """
+    import time as _time
+
+    cache_key = f"nws_{location.lower().strip()}"
+    if cache_key in NWS_CACHE:
+        cached = NWS_CACHE[cache_key]
+        if _time.time() - cached["cached_at"] < NWS_CACHE_TTL:
+            return cached["data"]
+
+    try:
+        # Step 1: Geocode the location
+        coords = geocode_location_to_coords(location)
+        if not coords:
+            # Fallback: try NWS point lookup directly for known cities
+            return _get_nws_alerts_by_state(location)
+
+        lat = coords["lat"]
+        lon = coords["lon"]
+
+        # Step 2: Get NWS grid point
+        point_url = f"https://api.weather.gov/points/{lat},{lon}"
+        headers = {"User-Agent": "Kazfen Lead Platform (notifications@kazfen.com)"}
+
+        point_resp = requests.get(point_url, headers=headers, timeout=8)
+        if point_resp.status_code != 200:
+            return {"has_hail_alert": False, "alerts": [], "error": "NWS point lookup failed"}
+
+        point_data = point_resp.json()
+        county_zone = point_data.get("properties", {}).get("county", "")
+        forecast_zone = point_data.get("properties", {}).get("forecastZone", "")
+
+        # Step 3: Get active alerts for this zone
+        zone_id = ""
+        if forecast_zone:
+            zone_id = forecast_zone.split("/")[-1]
+        elif county_zone:
+            zone_id = county_zone.split("/")[-1]
+
+        if not zone_id:
+            return {"has_hail_alert": False, "alerts": [], "error": "No zone found"}
+
+        alerts_url = f"https://api.weather.gov/alerts/active?zone={zone_id}"
+        alerts_resp = requests.get(alerts_url, headers=headers, timeout=8)
+
+        if alerts_resp.status_code != 200:
+            return {"has_hail_alert": False, "alerts": [], "error": "Alert fetch failed"}
+
+        alerts_data = alerts_resp.json()
+        features = alerts_data.get("features", [])
+
+        return _process_nws_alerts(features, location, cache_key)
+
+    except Exception as e:
+        print(f"NWS ALERT ERROR: {e}")
+        return {"has_hail_alert": False, "alerts": [], "error": str(e)}
+
+
+def _get_nws_alerts_by_state(location: str) -> dict:
+    """
+    Fallback: fetch alerts by state abbreviation if geocoding fails.
+    """
+    import time as _time
+
+    # Map common cities to state codes
+    state_map = {
+        "kansas city": "MO", "nashville": "TN", "charlotte": "NC",
+        "indianapolis": "IN", "grand rapids": "MI", "miami": "FL",
+        "new york": "NY", "los angeles": "CA", "dallas": "TX",
+        "houston": "TX", "denver": "CO", "atlanta": "GA",
+        "chicago": "IL", "phoenix": "AZ", "san antonio": "TX",
+        "oklahoma city": "OK", "tulsa": "OK", "memphis": "TN",
+        "st louis": "MO", "minneapolis": "MN",
+    }
+
+    location_lower = location.lower().strip()
+    state_code = None
+
+    for city, state in state_map.items():
+        if city in location_lower:
+            state_code = state
+            break
+
+    # Check if location itself is a state code
+    if not state_code and len(location_lower) == 2:
+        state_code = location_lower.upper()
+
+    if not state_code:
+        return {"has_hail_alert": False, "alerts": [], "error": "Could not determine state"}
+
+    try:
+        headers = {"User-Agent": "Kazfen Lead Platform (notifications@kazfen.com)"}
+        alerts_url = f"https://api.weather.gov/alerts/active?area={state_code}"
+        alerts_resp = requests.get(alerts_url, headers=headers, timeout=8)
+
+        if alerts_resp.status_code != 200:
+            return {"has_hail_alert": False, "alerts": [], "error": "State alert fetch failed"}
+
+        alerts_data = alerts_resp.json()
+        features = alerts_data.get("features", [])
+
+        cache_key = f"nws_{location_lower}"
+        return _process_nws_alerts(features, location, cache_key)
+
+    except Exception as e:
+        print(f"NWS STATE ALERT ERROR: {e}")
+        return {"has_hail_alert": False, "alerts": [], "error": str(e)}
+
+
+def _process_nws_alerts(features: list, location: str, cache_key: str) -> dict:
+    """
+    Process raw NWS alert features into structured hail/storm data.
+    """
+    import time as _time
+
+    has_hail_alert = False
+    has_severe_storm = False
+    has_tornado = False
+    hail_size = ""
+    hail_score_boost = 0
+    relevant_alerts = []
+
+    for feature in features:
+        props = feature.get("properties", {})
+        event = props.get("event", "").lower()
+        headline = props.get("headline", "")
+        description = props.get("description", "").lower()
+        severity = props.get("severity", "")
+        urgency_val = props.get("urgency", "")
+
+        # Check for hail-specific alerts
+        is_hail_related = False
+
+        if "hail" in event or "hail" in description:
+            is_hail_related = True
+            has_hail_alert = True
+
+        if "severe thunderstorm" in event:
+            has_severe_storm = True
+            # Severe thunderstorm warnings often contain hail info
+            if "hail" in description:
+                is_hail_related = True
+                has_hail_alert = True
+
+        if "tornado" in event:
+            has_tornado = True
+
+        # Extract hail size from description
+        detected_size = ""
+        for size_name in HAIL_SIZE_SCORES:
+            if size_name in description:
+                detected_size = size_name
+                size_boost = HAIL_SIZE_SCORES[size_name]
+                if size_boost > hail_score_boost:
+                    hail_score_boost = size_boost
+                    hail_size = size_name
+                break
+
+        if is_hail_related or has_severe_storm or has_tornado:
+            relevant_alerts.append({
+                "event": props.get("event", ""),
+                "headline": headline,
+                "severity": severity,
+                "urgency": urgency_val,
+                "hail_size": detected_size,
+                "areas": props.get("areaDesc", ""),
+            })
+
+    result = {
+        "has_hail_alert": has_hail_alert,
+        "has_severe_storm": has_severe_storm,
+        "has_tornado": has_tornado,
+        "hail_size": hail_size,
+        "hail_score_boost": hail_score_boost,
+        "alert_count": len(relevant_alerts),
+        "alerts": relevant_alerts[:5],  # Cap at 5 most relevant
+        "location_queried": location,
+    }
+
+    # Cache
+    NWS_CACHE[cache_key] = {
+        "data": result,
+        "cached_at": _time.time(),
+    }
+
+    return result
+
+
+def get_hail_score_boost(hail_data: dict) -> int:
+    """
+    Returns bonus points from hail alerts.
+    Stacks with storm_boost from Upgrade #2.
+    """
+    if not hail_data or not hail_data.get("has_hail_alert"):
+        if hail_data and hail_data.get("has_tornado"):
+            return 5  # Tornado = max urgency
+        if hail_data and hail_data.get("has_severe_storm"):
+            return 2  # Severe storm without confirmed hail
+        return 0
+
+    return hail_data.get("hail_score_boost", 0)
+
+
+def get_hail_context_for_ai(hail_data: dict) -> str:
+    """
+    Returns context string for AI prompts about active hail alerts.
+    """
+    if not hail_data:
+        return ""
+
+    parts = []
+
+    if hail_data.get("has_hail_alert"):
+        size = hail_data.get("hail_size", "unknown size")
+        parts.append(f"ACTIVE HAIL ALERT: {size} size hail reported in the area")
+
+    if hail_data.get("has_tornado"):
+        parts.append("TORNADO WARNING active in the area")
+
+    if hail_data.get("has_severe_storm") and not hail_data.get("has_hail_alert"):
+        parts.append("Severe thunderstorm warning active")
+
+    if not parts:
+        return ""
+
+    alert_text = ". ".join(parts)
+    return (
+        f"{alert_text}. This lead very likely has fresh roof damage. "
+        f"Treat as HIGH PRIORITY. Mention awareness of severe weather in their area. "
+        f"Fast-track to immediate inspection booking."
+    )
+
+
+# --- API ENDPOINT: Check hail alerts for any location ---
+@app.get("/api/hail-check")
+async def api_hail_check(location: str):
+    """
+    Check active hail/severe weather alerts for any location.
+    GET /api/hail-check?location=Kansas City, MO
+    GET /api/hail-check?location=66101
+    """
+    if not location:
+        return JSONResponse({"error": "Location required"}, status_code=400)
+
+    hail_data = get_nws_alerts_for_location(location)
+    return hail_data
+
+
+# --- API ENDPOINT: Hail monitor for all target markets ---
+@app.get("/api/hail-monitor")
+async def api_hail_monitor(request: Request):
+    """
+    Checks hail/severe weather alerts across all target markets.
+    Shows which cities have active hail — perfect for timing outreach.
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    results = []
+    for market in STORM_MARKETS:
+        location = f"{market['city']}, {market['state']}"
+        hail_data = get_nws_alerts_for_location(location)
+        results.append({
+            "city": market["city"],
+            "state": market["state"],
+            "has_hail_alert": hail_data.get("has_hail_alert", False),
+            "has_severe_storm": hail_data.get("has_severe_storm", False),
+            "has_tornado": hail_data.get("has_tornado", False),
+            "hail_size": hail_data.get("hail_size", ""),
+            "hail_score_boost": hail_data.get("hail_score_boost", 0),
+            "alert_count": hail_data.get("alert_count", 0),
+        })
+
+    # Sort: hail first, then severe storms, then tornado
+    results.sort(key=lambda x: (
+        not x["has_hail_alert"],
+        not x["has_tornado"],
+        not x["has_severe_storm"],
+    ))
+
+    active_hail = [r for r in results if r["has_hail_alert"]]
+    active_severe = [r for r in results if r["has_severe_storm"] or r["has_tornado"]]
+
+    return {
+        "markets_checked": len(results),
+        "active_hail_alerts": len(active_hail),
+        "active_severe_weather": len(active_severe),
         "results": results,
     }
 
