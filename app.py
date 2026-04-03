@@ -7,16 +7,17 @@ from twilio.rest import Client
 import os
 import csv
 import re
-from dotenv import load_dotenv
+import time
+import uuid
+import requests
+import stripe
 import smtplib
+from dotenv import load_dotenv
 from email.mime.text import MIMEText
 from fastapi import Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.twiml.voice_response import VoiceResponse, Gather
-import uuid
-import requests
-import stripe
 from fastapi import Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
@@ -46,6 +47,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 WEBCHAT_SESSIONS = {}
 SMS_SESSIONS = {}
+VOICE_SESSIONS = {}
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -117,6 +119,14 @@ async def receive_lead(request: Request):
         f"{insurance_status},{inspection_timing},{message},{lead_score},{lead_temperature},"
         f"{assigned_contractor},{status}\n"
     )
+    
+    if phone:
+        trigger_outbound_call(
+            lead_phone=phone,
+            lead_name=name,
+            lead_email=email,
+            lead_context=f"Form submission. Service: {service}. Urgency: {urgency}. Location: {location}",
+        )
 
     return {"message": "Lead submitted successfully"}
 
@@ -1124,7 +1134,398 @@ async def chat_message(request: Request):
 
     return {"reply": ai_reply}
 
+# ==============================================================================
+# KAZFEN VOICE AI — 60-SECOND OUTBOUND LEAD QUALIFICATION
+# ==============================================================================
 
+VOICE_SYSTEM_PROMPT = """You are Kazfen's AI roofing assistant on a PHONE CALL. You have 60 seconds max.
+
+RULES FOR PHONE CALLS:
+- Keep every response under 3 sentences. People hate long phone AI.
+- Sound warm, human, and fast. No filler words.
+- Ask ONE question per turn. Never two.
+- You are calling THEM — they already submitted interest. Acknowledge that.
+- Do NOT ask for their name or phone — you already have it from the lead form.
+
+YOUR GOAL (in order):
+1. Confirm they need roofing help (1 turn)
+2. Get the issue type: leak, storm damage, replacement, inspection (1 turn)
+3. Get urgency: emergency or can wait? (1 turn)
+4. Get property address or zip code (1 turn)
+5. Ask about insurance: filed a claim or want help? (1 turn)
+6. Confirm and close: "We'll have a roofing specialist reach out within the hour."
+
+If they sound urgent (active leak, water damage), skip to essentials:
+- Issue, address, and insurance. That's it. Move fast.
+
+WHEN DONE qualifying, end your FINAL message with this exact block:
+
+VOICE_LEAD_CAPTURED
+Issue: <issue>
+Urgency: <urgency>
+Address: <address>
+Insurance: <status>
+Roof Type: <if mentioned>
+Notes: <brief summary>
+
+If the caller says they're not interested or asks to stop, say:
+"No problem at all. If you ever need roofing help, we're here. Have a great day."
+Then end with: VOICE_CALL_END
+"""
+
+
+def generate_voice_reply(call_sid: str, caller_speech: str) -> str:
+    session = VOICE_SESSIONS.get(call_sid)
+    if not session:
+        return "Sorry, something went wrong. A specialist will call you back shortly."
+
+    session["history"].append({"role": "user", "content": caller_speech})
+    session["turn_count"] += 1
+
+    messages = [{"role": "system", "content": VOICE_SYSTEM_PROMPT}]
+
+    lead_context = session.get("lead_context", "")
+    if lead_context:
+        messages.append({
+            "role": "system",
+            "content": f"Lead context from form submission: {lead_context}"
+        })
+
+    turns_left = session["max_turns"] - session["turn_count"]
+    if turns_left <= 2:
+        messages.append({
+            "role": "system",
+            "content": "You are running low on time. Wrap up qualification NOW. "
+                       "Summarize what you have and close the call."
+        })
+
+    messages.extend(session["history"])
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=150,
+            temperature=0.7,
+        )
+        ai_reply = response.choices[0].message.content or ""
+    except Exception as e:
+        print(f"VOICE AI ERROR: {e}")
+        ai_reply = "Apologies, we're having a brief technical issue. A roofing specialist will call you back within the hour."
+
+    session["history"].append({"role": "assistant", "content": ai_reply})
+    return ai_reply
+
+
+def process_voice_lead(call_sid: str, ai_reply: str):
+    session = VOICE_SESSIONS.get(call_sid, {})
+    lead_phone = session.get("lead_phone", "")
+    lead_name = session.get("lead_name", "Unknown")
+    lead_email = session.get("lead_email", "")
+
+    issue = extract_field(ai_reply, "Issue") or "Phone inquiry"
+    urgency = extract_field(ai_reply, "Urgency") or "Medium"
+    address = extract_field(ai_reply, "Address") or ""
+    insurance = extract_field(ai_reply, "Insurance") or "Not discussed"
+    roof_type = extract_field(ai_reply, "Roof Type") or ""
+    notes = extract_field(ai_reply, "Notes") or ""
+
+    lead_score, lead_temperature = score_lead(
+        issue=issue,
+        urgency=urgency,
+        insurance_status=insurance,
+        inspection_timing="ASAP" if "urgent" in urgency.lower() else "This week",
+        location=address,
+        roof_type=roof_type,
+    )
+
+    contractor = get_contractor_for_location(address)
+
+    save_lead(
+        name=lead_name,
+        phone=lead_phone,
+        email=lead_email,
+        location=address,
+        roof_type=roof_type,
+        issue=issue,
+        urgency=urgency,
+        insurance_status=insurance,
+        inspection_timing="ASAP" if "urgent" in urgency.lower() else "This week",
+        lead_score=lead_score,
+        lead_temperature=lead_temperature,
+        assigned_contractor=contractor["label"],
+        assigned_email=contractor["email"],
+        assigned_phone=contractor["phone"],
+    )
+
+    if lead_temperature in ["HOT", "WARM"]:
+        send_sms_notification(
+            contractor["phone"], contractor["label"],
+            lead_name, lead_phone, lead_email, address,
+            roof_type, issue, urgency, insurance,
+            "ASAP", lead_score, lead_temperature,
+        )
+
+    print(f"VOICE LEAD SAVED: {lead_name} | {lead_phone} | Score: {lead_score} ({lead_temperature})")
+
+    if call_sid in VOICE_SESSIONS:
+        del VOICE_SESSIONS[call_sid]
+
+
+def trigger_outbound_call(
+    lead_phone: str,
+    lead_name: str = "there",
+    lead_email: str = "",
+    lead_context: str = "",
+):
+    try:
+        twilio_sid = os.getenv("TWILIO_SID")
+        twilio_auth = os.getenv("TWILIO_AUTH")
+        twilio_number = os.getenv("TWILIO_NUMBER")
+        base_url = os.getenv("KAZFEN_BASE_URL", "https://kazfen.com")
+
+        if not all([twilio_sid, twilio_auth, twilio_number, lead_phone]):
+            print("OUTBOUND CALL SKIPPED: missing env vars or phone")
+            return None
+
+        twilio_client = Client(twilio_sid, twilio_auth)
+
+        clean_phone = re.sub(r"[^\d+]", "", lead_phone)
+        if not clean_phone.startswith("+"):
+            if len(clean_phone) == 10:
+                clean_phone = "+1" + clean_phone
+            elif len(clean_phone) == 11 and clean_phone.startswith("1"):
+                clean_phone = "+" + clean_phone
+
+        call = twilio_client.calls.create(
+            to=clean_phone,
+            from_=twilio_number,
+            url=f"{base_url}/twilio/voice/outbound?lead_name={lead_name}&lead_phone={clean_phone}&lead_email={lead_email}",
+            method="POST",
+            timeout=60,
+            status_callback=f"{base_url}/twilio/voice/status",
+            status_callback_method="POST",
+        )
+
+        VOICE_SESSIONS[call.sid] = {
+            "call_sid": call.sid,
+            "lead_phone": clean_phone,
+            "lead_name": lead_name,
+            "lead_email": lead_email,
+            "lead_context": lead_context,
+            "history": [],
+            "started_at": time.time(),
+            "turn_count": 0,
+            "max_turns": 6,
+            "qualified": False,
+            "extracted_data": {},
+        }
+
+        print(f"OUTBOUND CALL INITIATED: {call.sid} -> {clean_phone}")
+        return call.sid
+
+    except Exception as e:
+        print(f"OUTBOUND CALL ERROR: {e}")
+        return None
+
+
+# --- OUTBOUND CALL: First contact (Kazfen calls the lead) ---
+@app.post("/twilio/voice/outbound")
+async def twilio_voice_outbound(request: Request):
+    params = request.query_params
+    lead_name = params.get("lead_name", "there")
+    lead_phone = params.get("lead_phone", "")
+    lead_email = params.get("lead_email", "")
+
+    form = await request.form()
+    call_sid = str(form.get("CallSid", ""))
+
+    if call_sid and call_sid not in VOICE_SESSIONS:
+        VOICE_SESSIONS[call_sid] = {
+            "call_sid": call_sid,
+            "lead_phone": lead_phone,
+            "lead_name": lead_name,
+            "lead_email": lead_email,
+            "lead_context": "",
+            "history": [],
+            "started_at": time.time(),
+            "turn_count": 0,
+            "max_turns": 6,
+            "qualified": False,
+            "extracted_data": {},
+        }
+
+    response = VoiceResponse()
+
+    greeting = f"Hi {lead_name}, this is Kazfen's roofing assistant following up on your inquiry. I just have a couple quick questions to get you connected with the right specialist. What roofing issue are you dealing with?"
+
+    if call_sid in VOICE_SESSIONS:
+        VOICE_SESSIONS[call_sid]["history"].append({
+            "role": "assistant", "content": greeting
+        })
+
+    gather = Gather(
+        input="speech",
+        action="/twilio/voice/conversation",
+        method="POST",
+        speech_timeout="auto",
+        timeout=10,
+    )
+    gather.say(greeting, voice="Polly.Matthew")
+    response.append(gather)
+
+    response.say(
+        "No worries — a roofing specialist will reach out to you shortly. Have a great day.",
+        voice="Polly.Matthew"
+    )
+
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+
+# --- MULTI-TURN CONVERSATION LOOP ---
+@app.post("/twilio/voice/conversation")
+async def twilio_voice_conversation(request: Request):
+    form = await request.form()
+    call_sid = str(form.get("CallSid", ""))
+    speech_result = str(form.get("SpeechResult", "")).strip()
+
+    response = VoiceResponse()
+
+    if call_sid not in VOICE_SESSIONS:
+        response.say(
+            "Thanks for your time. A specialist will follow up with you shortly.",
+            voice="Polly.Matthew"
+        )
+        return PlainTextResponse(str(response), media_type="application/xml")
+
+    session = VOICE_SESSIONS[call_sid]
+
+    elapsed = time.time() - session["started_at"]
+    if elapsed > 65 or session["turn_count"] >= session["max_turns"]:
+        ai_reply = "Thanks for all that info. We have everything we need. A roofing specialist will reach out within the hour. Have a great day."
+        response.say(ai_reply, voice="Polly.Matthew")
+
+        full_convo = " ".join([
+            msg["content"] for msg in session["history"] if msg["role"] == "user"
+        ])
+        session["history"].append({"role": "user", "content": speech_result})
+        process_voice_lead(call_sid, f"VOICE_LEAD_CAPTURED\nIssue: Phone inquiry\nUrgency: Medium\nAddress: Unknown\nInsurance: Not discussed\nNotes: {full_convo}")
+
+        return PlainTextResponse(str(response), media_type="application/xml")
+
+    ai_reply = generate_voice_reply(call_sid, speech_result or "No response")
+
+    if "VOICE_LEAD_CAPTURED" in ai_reply:
+        spoken_part = ai_reply.split("VOICE_LEAD_CAPTURED")[0].strip()
+        if not spoken_part:
+            spoken_part = "Perfect, we have everything we need. A roofing specialist will reach out within the hour. Thanks for your time."
+
+        response.say(spoken_part, voice="Polly.Matthew")
+        process_voice_lead(call_sid, ai_reply)
+
+        return PlainTextResponse(str(response), media_type="application/xml")
+
+    if "VOICE_CALL_END" in ai_reply:
+        spoken_part = ai_reply.replace("VOICE_CALL_END", "").strip()
+        response.say(spoken_part or "No problem. Have a great day.", voice="Polly.Matthew")
+
+        if call_sid in VOICE_SESSIONS:
+            del VOICE_SESSIONS[call_sid]
+
+        return PlainTextResponse(str(response), media_type="application/xml")
+
+    gather = Gather(
+        input="speech",
+        action="/twilio/voice/conversation",
+        method="POST",
+        speech_timeout="auto",
+        timeout=8,
+    )
+    gather.say(ai_reply, voice="Polly.Matthew")
+    response.append(gather)
+
+    response.say(
+        "I didn't catch that. No worries, a specialist will follow up with you shortly.",
+        voice="Polly.Matthew"
+    )
+
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+
+# --- INBOUND CALL HANDLER (when someone calls YOUR Twilio number) ---
+@app.post("/twilio/voice/inbound")
+async def twilio_voice_inbound(request: Request):
+    form = await request.form()
+    call_sid = str(form.get("CallSid", ""))
+    caller = str(form.get("From", ""))
+
+    VOICE_SESSIONS[call_sid] = {
+        "call_sid": call_sid,
+        "lead_phone": caller,
+        "lead_name": "there",
+        "lead_email": "",
+        "lead_context": "Inbound call",
+        "history": [],
+        "started_at": time.time(),
+        "turn_count": 0,
+        "max_turns": 6,
+        "qualified": False,
+        "extracted_data": {},
+    }
+
+    response = VoiceResponse()
+
+    greeting = "Thanks for calling Kazfen roofing. I'm an AI assistant here to get you connected with the right specialist fast. What roofing issue are you dealing with?"
+
+    VOICE_SESSIONS[call_sid]["history"].append({
+        "role": "assistant", "content": greeting
+    })
+
+    gather = Gather(
+        input="speech",
+        action="/twilio/voice/conversation",
+        method="POST",
+        speech_timeout="auto",
+        timeout=10,
+    )
+    gather.say(greeting, voice="Polly.Matthew")
+    response.append(gather)
+
+    response.say("We didn't catch that. A specialist will follow up. Goodbye.", voice="Polly.Matthew")
+
+    return PlainTextResponse(str(response), media_type="application/xml")
+
+
+# --- CALL STATUS CALLBACK ---
+@app.post("/twilio/voice/status")
+async def twilio_voice_status(request: Request):
+    form = await request.form()
+    call_sid = str(form.get("CallSid", ""))
+    call_status = str(form.get("CallStatus", ""))
+
+    print(f"CALL STATUS: {call_sid} -> {call_status}")
+
+    if call_status in ["completed", "failed", "busy", "no-answer", "canceled"]:
+        if call_sid in VOICE_SESSIONS:
+            session = VOICE_SESSIONS[call_sid]
+            if not session.get("qualified") and session["history"]:
+                full_convo = " ".join([
+                    msg["content"] for msg in session["history"] if msg["role"] == "user"
+                ])
+                if full_convo.strip():
+                    process_voice_lead(
+                        call_sid,
+                        f"VOICE_LEAD_CAPTURED\nIssue: Incomplete call ({call_status})\n"
+                        f"Urgency: Medium\nAddress: Unknown\nInsurance: Not discussed\n"
+                        f"Notes: Call ended with status '{call_status}'. Caller said: {full_convo}"
+                    )
+                else:
+                    del VOICE_SESSIONS[call_sid]
+
+    return JSONResponse({"status": "ok"})
+
+
+# --- SMS HANDLER (single clean version) ---
 @app.post("/twilio/sms")
 async def twilio_sms(request: Request):
     form = await request.form()
@@ -1146,97 +1547,33 @@ async def twilio_sms(request: Request):
     return PlainTextResponse(str(twiml), media_type="application/xml")
 
 
-@app.post("/twilio/voice")
-async def twilio_voice():
-    response = VoiceResponse()
+# --- MANUAL CALL TRIGGER (for dashboard + testing) ---
+@app.post("/api/call-lead")
+async def api_call_lead(request: Request):
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    gather = Gather(
-        input="speech",
-        action="/twilio/voice/process",
-        method="POST",
-        speech_timeout="auto"
-    )
-    gather.say(
-        "Thanks for calling. Please briefly tell us what roofing issue you are dealing with.",
-        voice="alice"
-    )
-    response.append(gather)
+    data = await request.json()
+    phone = data.get("phone", "")
+    name = data.get("name", "there")
+    email = data.get("email", "")
+    context = data.get("context", "")
 
-    response.say("We did not receive your message. Please call again.", voice="alice")
-    return PlainTextResponse(str(response), media_type="application/xml")
+    if not phone:
+        return JSONResponse({"error": "Phone number required"}, status_code=400)
 
-
-@app.post("/twilio/voice/process")
-async def twilio_voice_process(request: Request):
-    form = await request.form()
-    speech_result = str(form.get("SpeechResult", "")).strip()
-
-    ai_reply = generate_inbound_reply(
-        speech_result or "Caller did not provide details.",
-        channel="phone"
+    call_sid = trigger_outbound_call(
+        lead_phone=phone,
+        lead_name=name,
+        lead_email=email,
+        lead_context=context,
     )
 
-    response = VoiceResponse()
-    response.say(ai_reply, voice="alice")
-    response.say("A roofing specialist will follow up shortly. Goodbye.", voice="alice")
+    if call_sid:
+        return {"status": "call_initiated", "call_sid": call_sid}
+    else:
+        return JSONResponse({"error": "Failed to initiate call"}, status_code=500)
 
-    return PlainTextResponse(str(response), media_type="application/xml")
-
-@app.post("/twilio/sms")
-async def twilio_sms(request: Request):
-    form = await request.form()
-    from_number = str(form.get("From", "")).strip()
-    body = str(form.get("Body", "")).strip()
-
-    if from_number not in SMS_SESSIONS:
-        SMS_SESSIONS[from_number] = []
-
-    SMS_SESSIONS[from_number].append(body)
-
-    ai_reply = generate_inbound_reply(body, channel="sms")
-
-    SMS_SESSIONS[from_number].append(ai_reply)
-
-    twiml = MessagingResponse()
-    twiml.message(ai_reply)
-
-    return PlainTextResponse(str(twiml), media_type="application/xml")
-
-@app.post("/twilio/voice")
-async def twilio_voice():
-    response = VoiceResponse()
-
-    gather = Gather(
-        input="speech",
-        action="/twilio/voice/process",
-        method="POST",
-        speech_timeout="auto"
-    )
-    gather.say(
-        "Thanks for calling. Please briefly tell us what roofing issue you are dealing with.",
-        voice="alice"
-    )
-    response.append(gather)
-
-    response.say("We did not receive your message. Please call again.", voice="alice")
-    return PlainTextResponse(str(response), media_type="application/xml")
-
-
-@app.post("/twilio/voice/process")
-async def twilio_voice_process(request: Request):
-    form = await request.form()
-    speech_result = str(form.get("SpeechResult", "")).strip()
-
-    ai_reply = generate_inbound_reply(
-        speech_result or "Caller did not provide details.",
-        channel="phone"
-    )
-
-    response = VoiceResponse()
-    response.say(ai_reply, voice="alice")
-    response.say("A roofing specialist will follow up shortly. Goodbye.", voice="alice")
-
-    return PlainTextResponse(str(response), media_type="application/xml")
 
 
 from fastapi.responses import RedirectResponse
