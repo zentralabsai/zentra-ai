@@ -100,15 +100,26 @@ async def receive_lead(request: Request):
     insurance_status = insurance_claim
     inspection_timing = preferred_inspection_time if preferred_inspection_time else "Not specified"
 
+    weather_data = {}
+    storm_boost = 0
+    if location:
+        weather_data = get_weather_for_location(location)
+        storm_boost = get_storm_score_boost(weather_data)
+
     if str(urgency).lower() in ["high", "very urgent", "urgent", "asap"]:
-        lead_score = 9
+        lead_score = 9 + storm_boost
         lead_temperature = "HOT"
     elif str(urgency).lower() in ["medium", "soon"]:
-        lead_score = 6
-        lead_temperature = "WARM"
+        lead_score = 6 + storm_boost
+        lead_temperature = "HOT" if (6 + storm_boost) >= 8 else "WARM"
     else:
-        lead_score = 3
-        lead_temperature = "COLD"
+        lead_score = 3 + storm_boost
+        if (3 + storm_boost) >= 8:
+            lead_temperature = "HOT"
+        elif (3 + storm_boost) >= 5:
+            lead_temperature = "WARM"
+        else:
+            lead_temperature = "COLD"
 
     assigned_contractor = "Default Contractor"
     status = "New"
@@ -121,11 +132,14 @@ async def receive_lead(request: Request):
     )
     
     if phone:
+        storm_info = ""
+        if weather_data.get("has_storm"):
+            storm_info = f" ACTIVE STORM: {', '.join(weather_data.get('storm_details', []))}"
         trigger_outbound_call(
             lead_phone=phone,
             lead_name=name,
             lead_email=email,
-            lead_context=f"Form submission. Service: {service}. Urgency: {urgency}. Location: {location}",
+            lead_context=f"Form submission. Service: {service}. Urgency: {urgency}. Location: {location}.{storm_info}",
         )
 
     return {"message": "Lead submitted successfully"}
@@ -1574,6 +1588,249 @@ async def api_call_lead(request: Request):
     else:
         return JSONResponse({"error": "Failed to initiate call"}, status_code=500)
 
+
+# ==============================================================================
+# KAZFEN UPGRADE #2: WEATHER/STORM API — TOMORROW.IO INTEGRATION
+# ==============================================================================
+#
+# WHAT THIS DOES:
+# - Checks real-time weather for every lead's location when they submit
+# - If there's active storm/hail/high wind, auto-boosts lead score
+# - Adds storm context to lead data (contractors LOVE knowing this)
+# - New endpoint to check weather for any zip/city
+# - Storm monitor endpoint for your target markets
+#
+# WHY TOMORROW.IO:
+# - Free tier: 500 calls/day (plenty for launch)
+# - Has severe weather, hail, and wind data
+# - Simple REST API, no SDK needed
+#
+# SETUP:
+# 1. Go to https://www.tomorrow.io/weather-api/
+# 2. Sign up for free account
+# 3. Copy your API key
+# 4. Add to .env: TOMORROW_API_KEY=your_key_here
+#
+# NEW ENV VARIABLE:
+#     TOMORROW_API_KEY=your_api_key_from_tomorrow_io
+#
+# PASTE THIS ENTIRE BLOCK INTO app.py:
+# - Put it AFTER your Voice AI routes
+# - BEFORE your Stripe checkout routes
+# ==============================================================================
+
+
+# --- STORM SEVERITY CONFIG ---
+STORM_MARKETS = [
+    {"city": "Kansas City", "state": "MO"},
+    {"city": "Nashville", "state": "TN"},
+    {"city": "Charlotte", "state": "NC"},
+    {"city": "Indianapolis", "state": "IN"},
+    {"city": "Grand Rapids", "state": "MI"},
+]
+
+WEATHER_CACHE = {}
+WEATHER_CACHE_TTL = 1800  # 30 minutes — avoids burning API calls
+
+
+def get_weather_for_location(location: str) -> dict:
+    """
+    Fetches real-time weather data for a location string (city, zip, address).
+    Returns structured weather data with storm indicators.
+    """
+    import time as _time
+
+    api_key = os.getenv("TOMORROW_API_KEY")
+    if not api_key:
+        print("WEATHER SKIPPED: missing TOMORROW_API_KEY")
+        return {"error": "No API key", "has_storm": False}
+
+    # Check cache
+    cache_key = location.lower().strip()
+    if cache_key in WEATHER_CACHE:
+        cached = WEATHER_CACHE[cache_key]
+        if _time.time() - cached["cached_at"] < WEATHER_CACHE_TTL:
+            return cached["data"]
+
+    try:
+        url = "https://api.tomorrow.io/v4/weather/realtime"
+        params = {
+            "location": location,
+            "apikey": api_key,
+            "units": "imperial",
+        }
+
+        resp = requests.get(url, params=params, timeout=10)
+
+        if resp.status_code != 200:
+            print(f"WEATHER API ERROR: {resp.status_code} - {resp.text[:200]}")
+            return {"error": f"API returned {resp.status_code}", "has_storm": False}
+
+        data = resp.json()
+        values = data.get("data", {}).get("values", {})
+
+        # Extract key weather indicators
+        wind_speed = values.get("windSpeed", 0)         # mph
+        wind_gust = values.get("windGust", 0)            # mph
+        precip_intensity = values.get("precipitationIntensity", 0)  # in/hr
+        precip_type = values.get("precipitationType", 0)  # 0=none, 1=rain, 2=snow, 3=freezing rain, 4=ice/hail
+        weather_code = values.get("weatherCode", 0)
+        humidity = values.get("humidity", 0)
+        temperature = values.get("temperature", 0)
+
+        # Determine storm severity
+        has_storm = False
+        has_hail = False
+        storm_severity = "none"
+        storm_details = []
+
+        # Hail detection
+        if precip_type == 4:
+            has_hail = True
+            has_storm = True
+            storm_severity = "severe"
+            storm_details.append("Active hail")
+
+        # High wind detection (50+ mph = severe, 30+ = moderate)
+        if wind_gust >= 50 or wind_speed >= 40:
+            has_storm = True
+            storm_severity = "severe"
+            storm_details.append(f"High winds: {wind_gust:.0f} mph gusts")
+        elif wind_gust >= 30 or wind_speed >= 25:
+            has_storm = True
+            if storm_severity != "severe":
+                storm_severity = "moderate"
+            storm_details.append(f"Strong winds: {wind_gust:.0f} mph gusts")
+
+        # Heavy rain detection
+        if precip_intensity > 0.5:
+            has_storm = True
+            if storm_severity == "none":
+                storm_severity = "moderate"
+            storm_details.append(f"Heavy precipitation: {precip_intensity:.2f} in/hr")
+
+        # Thunderstorm weather codes (Tomorrow.io codes 8xxx are thunderstorms)
+        if weather_code >= 8000:
+            has_storm = True
+            if storm_severity != "severe":
+                storm_severity = "moderate"
+            storm_details.append("Thunderstorm activity")
+
+        result = {
+            "has_storm": has_storm,
+            "has_hail": has_hail,
+            "storm_severity": storm_severity,
+            "storm_details": storm_details,
+            "wind_speed": wind_speed,
+            "wind_gust": wind_gust,
+            "precip_intensity": precip_intensity,
+            "precip_type": precip_type,
+            "temperature": temperature,
+            "humidity": humidity,
+            "weather_code": weather_code,
+            "location_queried": location,
+        }
+
+        # Cache it
+        WEATHER_CACHE[cache_key] = {
+            "data": result,
+            "cached_at": _time.time(),
+        }
+
+        return result
+
+    except Exception as e:
+        print(f"WEATHER ERROR: {e}")
+        return {"error": str(e), "has_storm": False}
+
+
+def get_storm_score_boost(weather_data: dict) -> int:
+    """
+    Returns bonus points to add to lead score based on weather conditions.
+    Storm = higher urgency = hotter lead.
+    """
+    if not weather_data or not weather_data.get("has_storm"):
+        return 0
+
+    severity = weather_data.get("storm_severity", "none")
+
+    if severity == "severe":
+        return 4  # Major boost — this lead is probably desperate
+    elif severity == "moderate":
+        return 2  # Moderate boost — likely has damage
+    return 0
+
+
+def get_storm_context_for_ai(weather_data: dict) -> str:
+    """
+    Returns a string to inject into AI prompts so the chatbot/voice AI
+    knows about active weather in the lead's area.
+    """
+    if not weather_data or not weather_data.get("has_storm"):
+        return ""
+
+    details = ", ".join(weather_data.get("storm_details", []))
+    severity = weather_data.get("storm_severity", "unknown")
+
+    return (
+        f"ACTIVE WEATHER ALERT for this lead's area: {details}. "
+        f"Severity: {severity}. This lead may have fresh storm damage. "
+        f"Prioritize urgency, mention that you're aware of recent weather in their area, "
+        f"and fast-track them to inspection booking."
+    )
+
+
+# --- API ENDPOINT: Check weather for any location ---
+@app.get("/api/weather")
+async def api_weather(location: str):
+    """
+    Check weather for any location.
+    GET /api/weather?location=Kansas City, MO
+    GET /api/weather?location=66101
+    """
+    if not location:
+        return JSONResponse({"error": "Location required"}, status_code=400)
+
+    weather = get_weather_for_location(location)
+    return weather
+
+
+# --- API ENDPOINT: Storm monitor for all target markets ---
+@app.get("/api/storm-monitor")
+async def api_storm_monitor(request: Request):
+    """
+    Checks weather across all your target markets.
+    Returns which cities have active storms — gold for outreach timing.
+    Admin-only.
+    """
+    if not request.session.get("admin_logged_in"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    results = []
+    for market in STORM_MARKETS:
+        location = f"{market['city']}, {market['state']}"
+        weather = get_weather_for_location(location)
+        results.append({
+            "city": market["city"],
+            "state": market["state"],
+            "has_storm": weather.get("has_storm", False),
+            "storm_severity": weather.get("storm_severity", "none"),
+            "storm_details": weather.get("storm_details", []),
+            "wind_gust": weather.get("wind_gust", 0),
+            "temperature": weather.get("temperature", 0),
+        })
+
+    # Sort: storms first, then by severity
+    severity_order = {"severe": 0, "moderate": 1, "none": 2}
+    results.sort(key=lambda x: severity_order.get(x["storm_severity"], 3))
+
+    active_storms = [r for r in results if r["has_storm"]]
+
+    return {
+        "markets_checked": len(results),
+        "active_storms": len(active_storms),
+        "results": results,
+    }
 
 
 from fastapi.responses import RedirectResponse
