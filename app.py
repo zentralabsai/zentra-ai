@@ -2700,13 +2700,11 @@ def book_inspection(
             },
         }
 
-        if lead_email and "@" in lead_email:
-            event["attendees"] = [{"email": lead_email}]
-
+        
         created_event = service.events().insert(
             calendarId=calendar_id,
             body=event,
-            sendUpdates="all",
+            sendUpdates="none",
         ).execute()
 
         booking_time = start_dt.strftime("%A, %B %d at %I:%M %p")
