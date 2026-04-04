@@ -170,13 +170,11 @@ async def receive_lead(request: Request):
             weather_context += f" Hail: {hail_data.get('hail_size', 'confirmed')}"
 
         auto_book_if_qualified(
-            lead_name=name, lead_phone=phone, lead_email=email,
-            lead_location=location, issue=issue, urgency=urgency,
-            insurance_status=insurance_status, inspection_timing=inspection_timing,
-            lead_score=lead_score, lead_temperature=lead_temperature,
-            contractor_label=contractor["label"], contractor_phone=contractor["phone"],
-            weather_context=weather_context,
-        )
+                lead_name=name, lead_phone=phone, lead_email=email,
+                lead_location=location, lead_issue=issue,
+                lead_temperature=lead_temperature,
+                contractor_label=contractor["label"],
+            )
     except Exception as e:
         print(f"AUTO-BOOK ERROR (non-blocking): {e}")
 
