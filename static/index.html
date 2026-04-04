@@ -5,14 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kazfen | AI Lead Infrastructure</title>
   <link rel="icon" type="image/png" href="/favicon.png">
+
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #0b1020;
       color: white;
       line-height: 1.5;
     }
+
+    /* ── NAV ── */
     .nav {
       display: flex;
       justify-content: space-between;
@@ -30,18 +33,35 @@
       gap: 12px;
       font-size: 24px;
       font-weight: 700;
+      text-decoration: none;
+      color: white;
     }
     .brand img {
       width: 160px;
       height: auto;
       object-fit: contain;
     }
-    .nav a {
+    .nav-links {
+      display: flex;
+      align-items: center;
+    }
+    .nav a, .nav-links a {
       color: white;
       text-decoration: none;
       margin-left: 18px;
       opacity: 0.9;
     }
+    .menu-toggle {
+      display: none;
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 30px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    /* ── HERO ── */
     .hero {
       max-width: 1200px;
       margin: 0 auto;
@@ -62,11 +82,53 @@
       max-width: 640px;
       margin-bottom: 28px;
     }
-    .buttons {
+    .hero-offer {
+      margin-top: 18px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      background: rgba(37, 99, 235, 0.10);
+      border: 1px solid rgba(59, 130, 246, 0.30);
+      border-radius: 18px;
+      padding: 16px 18px;
+      max-width: 760px;
+    }
+    .hero-offer-badge {
+      background: #2563eb;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      padding: 8px 10px;
+      white-space: nowrap;
+    }
+    .hero-offer-text strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 6px;
+      color: white;
+    }
+    .hero-offer-text p {
+      margin: 0;
+      color: #cbd5e1;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .hero-buttons {
       display: flex;
       gap: 14px;
       flex-wrap: wrap;
+      margin-top: 18px;
     }
+    .hero-plan-note {
+      margin-top: 12px;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+
+    /* ── BUTTONS ── */
     .btn {
       display: inline-block;
       padding: 14px 22px;
@@ -83,6 +145,8 @@
       color: white;
       background: rgba(255,255,255,0.03);
     }
+
+    /* ── CARDS ── */
     .card {
       background: linear-gradient(180deg, rgba(37,99,235,0.14), rgba(255,255,255,0.03));
       border: 1px solid rgba(255,255,255,0.08);
@@ -90,6 +154,8 @@
       padding: 28px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     }
+
+    /* ── SECTIONS ── */
     .section {
       max-width: 1200px;
       margin: 0 auto;
@@ -104,6 +170,8 @@
       margin-bottom: 28px;
       max-width: 760px;
     }
+
+    /* ── FEATURES GRID ── */
     .grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -122,23 +190,56 @@
     .feature p {
       color: #c7d2fe;
     }
+
+    /* ── HOW IT WORKS ── */
+    .how-it-works {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+    .how-it-works h2 {
+      font-size: 44px;
+      margin-bottom: 12px;
+    }
+    .section-subtext {
+      color: #c7d2fe;
+      font-size: 18px;
+      margin-bottom: 36px;
+      max-width: 760px;
+    }
     .steps {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 20px;
     }
-    .step {
+    .step-card {
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 18px;
+      border-radius: 22px;
       padding: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.18);
     }
     .step-number {
-      font-size: 14px;
-      color: #60a5fa;
-      margin-bottom: 8px;
-      font-weight: 700;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: #2563eb;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      margin-bottom: 16px;
     }
+    .step-card h3 {
+      font-size: 24px;
+      margin-bottom: 12px;
+    }
+    .step-card p {
+      color: #dbe4ff;
+    }
+
+    /* ── CTA ── */
     .cta {
       text-align: center;
       padding: 70px 40px 90px;
@@ -154,452 +255,190 @@
       margin-bottom: 24px;
       font-size: 18px;
     }
+
+    /* ── FOOTER ── */
     footer {
       border-top: 1px solid rgba(255,255,255,0.08);
       padding: 24px 40px 40px;
       color: #94a3b8;
       text-align: center;
     }
-    @media (max-width: 900px) {
-      .hero, .grid, .steps { grid-template-columns: 1fr; }
-      .hero h1 { font-size: 42px; }
-      .nav { padding: 18px 20px; }
-      .hero, .section { padding-left: 20px; padding-right: 20px; }
+
+    /* ══════════════════════════════════════════
+       MOBILE — SINGLE CONSOLIDATED BLOCK
+       ══════════════════════════════════════════ */
+    @media (max-width: 768px) {
+
+      /* NAV */
+      .nav {
+        padding: 16px 20px;
+        position: relative;
+      }
+      .brand img {
+        width: 120px;
+      }
+      .menu-toggle {
+        display: block;
+      }
+      .nav-links {
+        display: none;
+        position: absolute;
+        top: 64px;
+        left: 16px;
+        right: 16px;
+        background: rgba(11,16,32,0.98);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        padding: 14px;
+        box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        z-index: 999;
+      }
+      .nav-links.show {
+        display: flex;
+      }
+      .nav-links a {
+        margin-left: 0;
+        font-size: 16px;
+        width: 100%;
+        padding: 10px 8px;
+        border-radius: 10px;
+      }
+      .nav-links a:active {
+        background: rgba(255,255,255,0.06);
+      }
+
+      /* HERO */
+      .hero {
+        grid-template-columns: 1fr;
+        padding: 40px 20px 28px;
+        gap: 24px;
+      }
+      .hero h1 {
+        font-size: 38px;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        margin-bottom: 16px;
+      }
+      .hero p {
+        font-size: 16px;
+        line-height: 1.6;
+        max-width: 100%;
+        margin-bottom: 16px;
+      }
+      .hero-offer {
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px;
+      }
+      .hero-offer-text strong {
+        font-size: 18px;
+      }
+      .hero-offer-text p {
+        font-size: 14px;
+      }
+      .hero-buttons {
+        flex-direction: column;
+        gap: 12px;
+      }
+      .hero-buttons a {
+        width: 100%;
+        text-align: center;
+        padding: 16px 22px;
+      }
+      .hero-plan-note {
+        font-size: 13px;
+      }
+
+      /* CARDS */
+      .card {
+        padding: 22px;
+        border-radius: 20px;
+      }
+      .card h3 {
+        font-size: 22px;
+      }
+      .card p, .card li {
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      /* SECTIONS */
+      .section {
+        padding: 24px 20px 48px;
+      }
+      .section h2 {
+        font-size: 28px;
+      }
+      .how-it-works {
+        padding: 48px 20px;
+      }
+      .how-it-works h2 {
+        font-size: 28px;
+      }
+      .section-subtext {
+        font-size: 16px;
+      }
+
+      /* GRIDS */
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      .steps {
+        grid-template-columns: 1fr;
+      }
+      .step-card h3 {
+        font-size: 20px;
+      }
+      .feature h3 {
+        font-size: 18px;
+      }
+
+      /* ROI GRID — 2x2 on mobile */
+      .section .grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .section .grid .card {
+        text-align: center;
+        padding: 18px 14px;
+      }
+      .section .grid .card h3 {
+        font-size: 14px;
+        margin-bottom: 6px;
+        color: #94a3b8;
+      }
+      .section .grid .card p {
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      /* CTA */
+      .cta {
+        padding: 48px 20px 60px;
+      }
+      .cta h2 {
+        font-size: 28px;
+      }
+      .cta p {
+        font-size: 16px;
+      }
+      .cta .btn {
+        width: 100%;
+        text-align: center;
+        display: block;
+      }
+
+      /* FOOTER */
+      footer {
+        padding: 20px;
+        font-size: 14px;
+      }
     }
 
-    .how-it-works {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 80px 24px;
-}
-
-.how-it-works h2 {
-    font-size: 44px;
-    margin-bottom: 12px;
-}
-
-.section-subtext {
-    color: #c7d2fe;
-    font-size: 18px;
-    margin-bottom: 36px;
-    max-width: 760px;
-}
-
-.steps {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-}
-
-.step-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 22px;
-    padding: 24px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
-}
-
-.step-number {
-    width: 40px;
-    height: 40px;
-    border-radius: 999px;
-    background: #2563eb;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    margin-bottom: 16px;
-}
-
-.step-card h3 {
-    font-size: 24px;
-    margin-bottom: 12px;
-}
-
-.step-card p {
-    color: #dbe4ff;
-}
-
-@media (max-width: 768px) {
-  .nav {
-    padding: 16px 20px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 14px;
-  }
-
-  .brand {
-    font-size: 20px;
-    gap: 10px;
-  }
-
-  .brand img {
-    width: 32px;
-    height: 32px;
-  }
-
-  .nav-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 18px;
-  }
-
-  .nav-links a {
-    margin-left: 0;
-    font-size: 16px;
-  }
-}
-@media (max-width: 768px) {
-  .hero {
-    padding: 48px 20px 24px;
-    text-align: left;
-  }
-
-  .hero h1 {
-    font-size: 52px;
-    line-height: 0.95;
-    letter-spacing: -0.03em;
-    margin-bottom: 18px;
-  }
-
-  .hero p {
-    font-size: 17px;
-    line-height: 1.65;
-    max-width: 100%;
-  }
-}
-
-@media (max-width: 768px) {
-  .hero-buttons,
-  .cta-row,
-  .hero-cta {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    align-items: stretch;
-  }
-
-  .hero-buttons a,
-  .cta-row a,
-  .hero-cta a,
-  .hero-buttons button,
-  .cta-row button,
-  .hero-cta button {
-    width: 100%;
-    text-align: center;
-  }
-}
-
-@media (max-width: 768px) {
-  .hero {
-    margin-bottom: 28px;
-  }
-
-  .card,
-  .info-card,
-  .feature-card {
-    margin-top: 20px;
-  }
-}
-
-@media (max-width: 768px) {
-  .card,
-  .info-card,
-  .feature-card {
-    padding: 24px 20px;
-    border-radius: 20px;
-  }
-
-  .card h2,
-  .info-card h2,
-  .feature-card h2 {
-    font-size: 24px;
-    line-height: 1.2;
-    margin-bottom: 14px;
-  }
-
-  .card p,
-  .info-card p,
-  .feature-card p,
-  .card li,
-  .info-card li,
-  .feature-card li {
-    font-size: 16px;
-    line-height: 1.6;
-  }
-}
-
-
-.menu-toggle {
-  display: none;
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 30px;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.nav-links {
-  display: flex;
-  align-items: center;
-}
-
-@media (max-width: 768px) {
-  .nav {
-    padding: 16px 20px;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    position: relative;
-  }
-
-  .brand {
-    font-size: 20px;
-    gap: 10px;
-  }
-
-  .brand img {
-    height: 32px;
-    width: 32px;
-    object-fit: contain;
-  }
-
-  .menu-toggle {
-    display: block;
-  }
-
-  .nav-links {
-    display: none;
-    position: absolute;
-    top: 72px;
-    left: 20px;
-    right: 20px;
-    background: rgba(11,16,32,0.98);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 14px;
-    box-shadow: 0 18px 50px rgba(0,0,0,0.35);
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    z-index: 999;
-  }
-
-  .nav-links.show {
-    display: flex;
-  }
-
-  .nav-links a {
-    margin-left: 0;
-    font-size: 16px;
-    width: 100%;
-    padding: 8px 4px;
-  }
-
-  .hero {
-    grid-template-columns: 1fr;
-    padding: 48px 20px 28px;
-    gap: 24px;
-  }
-
-  .hero h1 {
-    font-size: 44px;
-    line-height: 1.02;
-    margin-bottom: 16px;
-  }
-
-  .hero p {
-    font-size: 17px;
-    line-height: 1.6;
-  }
-
-  .hero-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .hero-buttons a {
-    width: 100%;
-    text-align: center;
-  }
-
-  .card {
-    padding: 22px;
-    border-radius: 20px;
-  }
-
-  .card h2 {
-    font-size: 24px;
-  }
-
-  .card p,
-  .card li {
-    font-size: 16px;
-    line-height: 1.6;
-  }
-}
-
-@media (max-width: 768px) {
-
-  .hero {
-    grid-template-columns: 1fr;
-    padding: 48px 20px 28px;
-    gap: 24px;
-  }
-
-  .hero h1 {
-    font-size: 42px;
-    line-height: 1.05;
-  }
-
-  .hero p {
-    font-size: 17px;
-  }
-
-  .hero-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 10px;
-  }
-
-  .hero-buttons a {
-    width: 100%;
-    text-align: center;
-  }
-
-  .nav {
-    padding: 16px 20px;
-  }
-
-  .card {
-    padding: 22px;
-  }
-
-  .card h3 {
-    font-size: 22px;
-  }
-
-  .card p,
-  .card li {
-    font-size: 16px;
-  }
-}
-
-.case-study {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 60px 24px;
-}
-
-.case-inner {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 24px;
-  padding: 32px;
-}
-
-.case-inner h2 {
-  font-size: 32px;
-  margin-bottom: 16px;
-}
-
-.case-text {
-  color: #c7d2fe;
-  font-size: 18px;
-  line-height: 1.6;
-}
-
-.testimonials {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-}
-
-.testimonials h2 {
-  font-size: 32px;
-  margin-bottom: 24px;
-}
-
-.testimonial-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-}
-
-.testimonial-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 20px;
-  padding: 24px;
-}
-
-.testimonial-card p {
-  color: #e5e7eb;
-  font-size: 17px;
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-
-.testimonial-card strong {
-  color: white;
-  font-size: 14px;
-}
-
-@media (max-width: 768px) {
-  .testimonial-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.hero-offer {
-  margin-top: 18px;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  background: rgba(37, 99, 235, 0.10);
-  border: 1px solid rgba(59, 130, 246, 0.30);
-  border-radius: 18px;
-  padding: 16px 18px;
-  max-width: 760px;
-}
-
-.hero-offer-badge {
-  background: #2563eb;
-  color: white;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-radius: 999px;
-  padding: 8px 10px;
-  white-space: nowrap;
-}
-
-.hero-offer-text strong {
-  display: block;
-  font-size: 20px;
-  margin-bottom: 6px;
-  color: white;
-}
-
-.hero-offer-text p {
-  margin: 0;
-  color: #cbd5e1;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-.hero-plan-note {
-  margin-top: 12px;
-  color: #94a3b8;
-  font-size: 14px;
-}
-
-  </style>
+    </style>
 </head>
 <body>
   <nav class="nav">
