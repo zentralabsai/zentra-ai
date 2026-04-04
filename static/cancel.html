@@ -1,13 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Payment Cancelled</title>
-    <link rel="icon" type="image/png" href="/favicon.png">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Cancelled | Kazfen</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1020;
+      color: white;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    img { width: 160px; margin-bottom: 32px; }
+    h1 { font-size: 36px; margin-bottom: 12px; }
+    p { color: #c7d2fe; font-size: 18px; margin-bottom: 28px; }
+    a {
+      display: inline-block;
+      padding: 14px 28px;
+      background: #2563eb;
+      color: white;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+  </style>
 </head>
-<img src="/logo.png" style="height:50px; margin-bottom:20px;">
-<body style="font-family: Arial; text-align: center; padding-top: 100px;">
-    <h1>Payment Cancelled</h1>
-    <p>Your payment was cancelled.</p>
-    <a href="/pricing.html" style="font-size:18px;">Back to Pricing</a>
+<body>
+  <img src="/logo.png" alt="Kazfen logo">
+  <h1>Payment Cancelled</h1>
+  <p>No worries — your payment was not processed. You can try again whenever you're ready.</p>
+  <a href="/static/pricing.html">Back to Pricing</a>
 </body>
 </html>

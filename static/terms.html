@@ -4,14 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terms and Conditions — Kazfen</title>
-    <link rel="icon" href="/static/favicon.png" />
+    <link rel="icon" type="image/png" href="/favicon.png">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'DM Sans', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background: #0b1020;
             color: #c8cdd8;
             line-height: 1.8;
@@ -22,23 +20,24 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 40px;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 24px 40px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            background: rgba(11,16,32,0.95);
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
 
-        .nav a {
-            color: #fff;
-            text-decoration: none;
-            font-weight: 700;
-            font-size: 20px;
-            letter-spacing: -0.02em;
+        .nav img {
+            width: 160px;
+            height: auto;
         }
 
         .nav .back {
-            color: #6b7280;
+            color: #94a3b8;
             font-size: 14px;
             font-weight: 500;
-            transition: color 0.2s;
+            text-decoration: none;
         }
 
         .nav .back:hover { color: #fff; }
@@ -54,11 +53,10 @@
             font-weight: 700;
             color: #fff;
             margin-bottom: 8px;
-            letter-spacing: -0.03em;
         }
 
         .last-updated {
-            color: #6b7280;
+            color: #94a3b8;
             font-size: 14px;
             margin-bottom: 48px;
         }
@@ -69,7 +67,6 @@
             color: #fff;
             margin-top: 40px;
             margin-bottom: 12px;
-            letter-spacing: -0.02em;
         }
 
         p {
@@ -89,18 +86,32 @@
 
         a { color: #3b82f6; }
 
-        .footer {
+        footer {
             text-align: center;
-            padding: 40px;
-            color: #6b7280;
+            padding: 24px 40px 40px;
+            color: #94a3b8;
             font-size: 13px;
-            border-top: 1px solid rgba(255,255,255,0.06);
+            border-top: 1px solid rgba(255,255,255,0.08);
+        }
+
+        footer a {
+            color: #94a3b8;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+
+        @media (max-width: 768px) {
+            .nav { padding: 16px 20px; }
+            .nav img { width: 120px; }
+            .container { padding: 40px 20px 60px; }
+            h1 { font-size: 28px; }
+            footer { padding: 20px; font-size: 13px; }
         }
     </style>
 </head>
 <body>
     <div class="nav">
-        <a href="/">Kazfen</a>
+        <a href="/"><img src="/logo.png" alt="Kazfen logo"></a>
         <a href="/" class="back">← Back to Home</a>
     </div>
 
@@ -194,8 +205,13 @@
         <p>Website: <a href="https://kazfen.com">kazfen.com</a></p>
     </div>
 
-    <div class="footer">
-        &copy; 2026 Kazfen. All rights reserved.
-    </div>
+    <footer>
+        <div style="margin-bottom:12px;">
+            <a href="/static/pricing.html">Pricing</a>
+            <a href="https://calendly.com/bookings-kazfen/30min" target="_blank">Book Demo</a>
+            <a href="/static/privacy.html">Privacy Policy</a>
+        </div>
+        © 2026 Kazfen. All rights reserved.
+    </footer>
 </body>
 </html>
