@@ -144,43 +144,49 @@ async def receive_lead(request: Request):
         f"{assigned_contractor},{status}\n"
     )
     
-    if phone:
-        storm_info = ""
+    try:
+        if phone:
+            storm_info = ""
+            if weather_data.get("has_storm"):
+                storm_info = f" ACTIVE STORM: {', '.join(weather_data.get('storm_details', []))}"
+            if hail_data.get("has_hail_alert"):
+                storm_info += f" HAIL ALERT: {hail_data.get('hail_size', 'confirmed')} size hail"
+            trigger_outbound_call(
+                lead_phone=phone, lead_name=name, lead_email=email,
+                lead_context=f"Form submission. Service: {service}. Urgency: {urgency}. Location: {location}.{storm_info}",
+            )
+    except Exception as e:
+        print(f"OUTBOUND CALL ERROR (non-blocking): {e}")
+
+       
+
+    # Auto-book inspection for qualified leads
+    try:
+        contractor = get_contractor_for_location(location)
+        weather_context = ""
         if weather_data.get("has_storm"):
-            storm_info = f" ACTIVE STORM: {', '.join(weather_data.get('storm_details', []))}"
+            weather_context = ", ".join(weather_data.get("storm_details", []))
         if hail_data.get("has_hail_alert"):
-            storm_info += f" HAIL ALERT: {hail_data.get('hail_size', 'confirmed')} size hail"
-        trigger_outbound_call(
-            lead_phone=phone,
-            lead_name=name,
-            lead_email=email,
-            lead_context=f"Form submission. Service: {service}. Urgency: {urgency}. Location: {location}.{storm_info}",
+            weather_context += f" Hail: {hail_data.get('hail_size', 'confirmed')}"
+
+        auto_book_if_qualified(
+            lead_name=name, lead_phone=phone, lead_email=email,
+            lead_location=location, issue=issue, urgency=urgency,
+            insurance_status=insurance_status, inspection_timing=inspection_timing,
+            lead_score=lead_score, lead_temperature=lead_temperature,
+            contractor_label=contractor["label"], contractor_phone=contractor["phone"],
+            weather_context=weather_context,
         )
+    except Exception as e:
+        print(f"AUTO-BOOK ERROR (non-blocking): {e}")
 
-        # Auto-book inspection for qualified leads
-    contractor = get_contractor_for_location(location)
-    weather_context = ""
-    if weather_data.get("has_storm"):
-        weather_context = ", ".join(weather_data.get("storm_details", []))
-    if hail_data.get("has_hail_alert"):
-        weather_context += f" Hail: {hail_data.get('hail_size', 'confirmed')}"
-
-    auto_book_if_qualified(
-        lead_name=name, lead_phone=phone, lead_email=email,
-        lead_location=location, issue=issue, urgency=urgency,
-        insurance_status=insurance_status, inspection_timing=inspection_timing,
-        lead_score=lead_score, lead_temperature=lead_temperature,
-        contractor_label=contractor["label"], contractor_phone=contractor["phone"],
-        weather_context=weather_context,
-    )
-
-    send_smart_confirmation_sms(
-        name=name,
-        phone=phone,
-        issue=issue,
-        urgency=urgency,
-        lead_temperature=lead_temperature,
-    )
+    try:
+        send_smart_confirmation_sms(
+            name=name, phone=phone, issue=issue,
+            urgency=urgency, lead_temperature=lead_temperature,
+        )
+    except Exception as e:
+        print(f"SMART SMS ERROR (non-blocking): {e}")
 
     return {"message": "Lead submitted successfully"}
 
