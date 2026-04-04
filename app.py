@@ -1360,7 +1360,7 @@ def trigger_outbound_call(
         call = twilio_client.calls.create(
             to=clean_phone,
             from_=twilio_number,
-            url=f"{base_url}/twilio/voice/outbound?lead_name={lead_name}&lead_phone={clean_phone}&lead_email={lead_email}",
+            url=f"{base_url}/twilio/voice/outbound?lead_name={requests.utils.quote(str(lead_name))}&lead_phone={clean_phone}&lead_email={requests.utils.quote(str(lead_email))}",
             method="POST",
             timeout=60,
             status_callback=f"{base_url}/twilio/voice/status",
@@ -2502,10 +2502,15 @@ async def api_qualify_lead(request: Request):
 # - BEFORE your Stripe checkout routes
 # ==============================================================================
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from datetime import datetime, timedelta
-import pytz
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    import pytz
+    GOOGLE_CALENDAR_AVAILABLE = True
+except ImportError:
+    print("Google Calendar libraries not available - calendar features disabled")
+    GOOGLE_CALENDAR_AVAILABLE = False
 
 def get_calendar_service():
     """
@@ -2721,7 +2726,7 @@ def book_inspection(
         return {"success": False, "error": str(e)}
 
 
-def auto_book_hot_lead(
+def auto_book_if_qualified(
     lead_name: str,
     lead_phone: str,
     lead_email: str,
@@ -2734,6 +2739,9 @@ def auto_book_hot_lead(
     Automatically books the next available slot for HOT leads.
     Sends confirmation SMS to the lead.
     """
+    if not GOOGLE_CALENDAR_AVAILABLE:
+        print("AUTO-BOOK SKIPPED: Google Calendar not available")
+        return None
     if lead_temperature not in ["HOT"]:
         return {"success": False, "reason": "Auto-booking only for HOT leads"}
 
