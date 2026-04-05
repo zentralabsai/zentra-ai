@@ -80,6 +80,12 @@ def init_db():
     except Exception:
         pass
 
+    # Add job value tracking to leads
+    try:
+        cur.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS job_value DECIMAL DEFAULT 0")
+    except Exception:
+        pass
+
     conn.commit()
     cur.close()
     conn.close()
@@ -380,3 +386,55 @@ def update_contractor_plan(contractor_id: int, plan: str, lead_limit: int):
     conn.commit()
     cur.close()
     conn.close()
+
+    def update_lead_job_value(lead_id: int, job_value: float, contractor_id: int = None):
+    """Set the dollar value of a won job."""
+    conn = get_connection()
+    cur = conn.cursor()
+    if contractor_id:
+        cur.execute(
+            "UPDATE leads SET job_value = %s, status = 'Won' WHERE id = %s AND contractor_id = %s",
+            (job_value, lead_id, contractor_id)
+        )
+    else:
+        cur.execute(
+            "UPDATE leads SET job_value = %s, status = 'Won' WHERE id = %s",
+            (job_value, lead_id)
+        )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_roi_stats(contractor_id: int) -> dict:
+    """Calculate ROI metrics for a contractor."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT
+            COUNT(*) as total_leads,
+            COUNT(*) FILTER (WHERE status = 'Won') as won_jobs,
+            COUNT(*) FILTER (WHERE status = 'Inspection Booked') as booked_inspections,
+            COUNT(*) FILTER (WHERE status = 'Contacted') as contacted,
+            COALESCE(SUM(job_value) FILTER (WHERE status = 'Won'), 0) as total_revenue,
+            COALESCE(AVG(job_value) FILTER (WHERE status = 'Won' AND job_value > 0), 0) as avg_job_value,
+            COUNT(*) FILTER (WHERE lead_temperature = 'HOT') as hot_leads,
+            COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW())) as leads_this_month,
+            COALESCE(SUM(job_value) FILTER (WHERE status = 'Won' AND created_at >= date_trunc('month', NOW())), 0) as revenue_this_month,
+            COUNT(*) FILTER (WHERE status = 'Won' AND created_at >= date_trunc('month', NOW())) as won_this_month
+        FROM leads
+        WHERE contractor_id = %s
+    """, (contractor_id,))
+    stats = dict(cur.fetchone())
+    cur.close()
+    conn.close()
+
+    # Calculate conversion rates
+    total = stats["total_leads"] or 1
+    stats["lead_to_inspection_rate"] = round((stats["booked_inspections"] / total) * 100, 1)
+    stats["lead_to_won_rate"] = round((stats["won_jobs"] / total) * 100, 1)
+    stats["total_revenue"] = float(stats["total_revenue"])
+    stats["avg_job_value"] = float(stats["avg_job_value"])
+    stats["revenue_this_month"] = float(stats["revenue_this_month"])
+
+    return stats

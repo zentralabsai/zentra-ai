@@ -27,6 +27,7 @@ from db import (
     create_contractor, authenticate_contractor, get_contractor_by_id,
     get_all_contractors, update_contractor_stripe, get_contractor_by_stripe_customer,
     get_monthly_lead_count, update_contractor_plan,
+    update_lead_job_value, get_roi_stats,
 )
 load_dotenv()
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -959,7 +960,7 @@ def contractor_dashboard(request: Request):
                     <a href="/contractor-update-status?lead_id={lead.get('id')}&status=New" class="mini-btn">New</a>
                     <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Contacted" class="mini-btn">Contacted</a>
                     <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Inspection%20Booked" class="mini-btn">Booked</a>
-                    <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Won" class="mini-btn">Won</a>
+                    <a href="/contractor-set-job-value?lead_id={lead.get('id')}" class="mini-btn" style="background:#22c55e; color:white;">Won $</a>
                     <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Lost" class="mini-btn">Lost</a>
                 </div>
             </td>
@@ -1007,6 +1008,7 @@ def contractor_dashboard(request: Request):
                     <div class="sub">Kazfen Lead Dashboard</div>
                 </div>
                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <a class="btn" style="background:#22c55e;" href="/contractor-roi">ROI Dashboard</a>
                     <a class="btn" href="/contractor-export">Export CSV</a>
                     <a class="btn btn-outline" href="/contractor-logout">Logout</a>
                 </div>
@@ -1125,6 +1127,168 @@ def contractor_settings_save(request: Request, voice_company_name: str = Form(""
     conn.close()
 
     return RedirectResponse(url="/contractor-settings", status_code=303)
+
+@app.get("/contractor-roi", response_class=HTMLResponse)
+def contractor_roi_page(request: Request):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    contractor_name = request.session.get("contractor_name", "Your Company")
+    stats = get_roi_stats(contractor_id)
+
+    total_revenue = stats["total_revenue"]
+    revenue_this_month = stats["revenue_this_month"]
+    won_jobs = stats["won_jobs"]
+    won_this_month = stats["won_this_month"]
+    avg_job = stats["avg_job_value"]
+    total_leads = stats["total_leads"]
+    booked = stats["booked_inspections"]
+    hot = stats["hot_leads"]
+    leads_this_month = stats["leads_this_month"]
+    inspect_rate = stats["lead_to_inspection_rate"]
+    won_rate = stats["lead_to_won_rate"]
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ROI Dashboard — {contractor_name}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            body {{ font-family: -apple-system, sans-serif; background: #0b1020; color: white; margin: 0; padding: 30px; }}
+            .wrap {{ max-width: 1100px; margin: 0 auto; }}
+            .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }}
+            .title {{ font-size: 32px; font-weight: 800; }}
+            .sub {{ color: #94a3b8; font-size: 14px; margin-top: 4px; }}
+            .btn {{ display: inline-block; text-decoration: none; background: #2563eb; color: white; padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 14px; }}
+            .btn-outline {{ background: transparent; border: 1px solid rgba(255,255,255,0.12); color: white; }}
+            .hero-stat {{ background: linear-gradient(135deg, rgba(37,99,235,0.2), rgba(16,185,129,0.15)); border: 1px solid rgba(37,99,235,0.3); border-radius: 24px; padding: 32px; text-align: center; margin-bottom: 24px; }}
+            .hero-stat .big {{ font-size: 56px; font-weight: 800; color: #22c55e; }}
+            .hero-stat .label {{ color: #94a3b8; font-size: 16px; margin-top: 8px; }}
+            .grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }}
+            .card {{ background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 22px; }}
+            .card .label {{ color: #94a3b8; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 8px; }}
+            .card .value {{ font-size: 28px; font-weight: 800; }}
+            .green {{ color: #22c55e; }}
+            .blue {{ color: #3b82f6; }}
+            .yellow {{ color: #fcd34d; }}
+            .section-title {{ font-size: 22px; font-weight: 700; margin-bottom: 16px; margin-top: 32px; }}
+            .bar-container {{ background: rgba(255,255,255,0.06); border-radius: 12px; height: 32px; overflow: hidden; margin-bottom: 12px; }}
+            .bar {{ height: 100%; border-radius: 12px; display: flex; align-items: center; padding-left: 12px; font-size: 13px; font-weight: 700; }}
+            @media (max-width: 768px) {{ .grid {{ grid-template-columns: 1fr 1fr; }} .hero-stat .big {{ font-size: 40px; }} body {{ padding: 16px; }} }}
+            @media (max-width: 480px) {{ .grid {{ grid-template-columns: 1fr; }} }}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="header">
+                <div>
+                    <div class="title">ROI Dashboard</div>
+                    <div class="sub">{contractor_name} — Revenue attributed to Kazfen</div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <a class="btn" href="/dashboard">Lead Dashboard</a>
+                    <a class="btn btn-outline" href="/contractor-settings">Settings</a>
+                </div>
+            </div>
+
+            <div class="hero-stat">
+                <div class="big">${total_revenue:,.0f}</div>
+                <div class="label">Total Revenue Generated by Kazfen</div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <div class="label">Revenue This Month</div>
+                    <div class="value green">${revenue_this_month:,.0f}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Jobs Won</div>
+                    <div class="value blue">{won_jobs}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Won This Month</div>
+                    <div class="value blue">{won_this_month}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Avg Job Value</div>
+                    <div class="value green">${avg_job:,.0f}</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <div class="label">Total Leads</div>
+                    <div class="value">{total_leads}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Leads This Month</div>
+                    <div class="value">{leads_this_month}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Inspections Booked</div>
+                    <div class="value yellow">{booked}</div>
+                </div>
+                <div class="card">
+                    <div class="label">Hot Leads</div>
+                    <div class="value yellow">{hot}</div>
+                </div>
+            </div>
+
+            <div class="section-title">Conversion Funnel</div>
+
+            <p style="color:#94a3b8; margin-bottom:6px; font-size:14px;">Lead → Inspection Booked ({inspect_rate}%)</p>
+            <div class="bar-container">
+                <div class="bar" style="width:{max(inspect_rate, 2)}%; background:#3b82f6;">{inspect_rate}%</div>
+            </div>
+
+            <p style="color:#94a3b8; margin-bottom:6px; font-size:14px;">Lead → Job Won ({won_rate}%)</p>
+            <div class="bar-container">
+                <div class="bar" style="width:{max(won_rate, 2)}%; background:#22c55e;">{won_rate}%</div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.get("/contractor-set-job-value", response_class=HTMLResponse)
+def set_job_value_page(request: Request, lead_id: int):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    return f"""
+    <html>
+    <head><title>Set Job Value | Kazfen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <body style="font-family:-apple-system,sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px;">
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:32px; border-radius:24px; width:100%; max-width:400px;">
+            <h2 style="margin-bottom:6px;">Mark as Won</h2>
+            <p style="color:#94a3b8; font-size:14px; margin-bottom:24px;">Enter the job value to track your ROI.</p>
+            <form method="post" action="/contractor-set-job-value">
+                <input type="hidden" name="lead_id" value="{lead_id}">
+                <label style="display:block; color:#c7d2fe; font-size:14px; font-weight:600; margin-bottom:6px;">Job Value ($)</label>
+                <input name="job_value" type="number" step="0.01" min="0" placeholder="e.g. 8500" required style="display:block; width:100%; padding:12px; margin-bottom:20px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:18px; box-sizing:border-box;" />
+                <button type="submit" style="width:100%; padding:14px; background:#22c55e; color:white; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Save & Mark Won</button>
+            </form>
+            <a href="/dashboard" style="display:block; text-align:center; margin-top:16px; color:#94a3b8; text-decoration:none; font-size:14px;">← Cancel</a>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.post("/contractor-set-job-value")
+def set_job_value_post(request: Request, lead_id: int = Form(...), job_value: float = Form(...)):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    update_lead_job_value(lead_id, job_value, contractor_id=contractor_id)
+    return RedirectResponse(url="/contractor-roi", status_code=303)
 
 @app.get("/leads", response_class=HTMLResponse)
 def view_leads(request: Request):
