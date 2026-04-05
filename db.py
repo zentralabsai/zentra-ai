@@ -392,9 +392,10 @@ def update_contractor_plan(contractor_id: int, plan: str, lead_limit: int):
     conn.commit()
     cur.close()
     conn.close()
+# ROI tracking
 
     def update_lead_job_value(lead_id: int, job_value: float, contractor_id: int = None):
-    """Set the dollar value of a won job."""
+                """Set the dollar value of a won job."""
     conn = get_connection()
     cur = conn.cursor()
     if contractor_id:
