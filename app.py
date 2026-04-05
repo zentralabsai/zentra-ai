@@ -66,9 +66,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key="n53M+r9gA+B6Xrarun0p5w==",
-    same_site="lax",
+    secret_key=os.getenv("SESSION_SECRET"),
+    same_site="strict",
     https_only=True,
+    max_age=3600,
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -747,8 +748,8 @@ def export_leads():
         headers={"Content-Disposition": "attachment; filename=kazfen-leads.csv"}
     )
 
-ADMIN_USERNAME = "kazfenadmin"
-ADMIN_PASSWORD = "n53M+r9gA+B6Xrarun0p5w=="
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 
 @app.get("/admin-login", response_class=HTMLResponse)
