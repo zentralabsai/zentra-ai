@@ -1089,6 +1089,21 @@ def contractor_settings_page(request: Request):
     contractor = get_contractor_by_id(contractor_id)
     voice_name = contractor.get("voice_company_name", "") if contractor else ""
 
+    review_link = ""
+    if contractor:
+        try:
+            from db import get_connection
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT google_review_link FROM contractors WHERE id = %s", (contractor_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                review_link = row[0]
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
+
     return f"""
     <html>
     <head><title>Settings | Kazfen</title>
@@ -1103,6 +1118,9 @@ def contractor_settings_page(request: Request):
                 <label style="display:block; color:#c7d2fe; font-size:14px; font-weight:600; margin-bottom:6px;">Company Name for AI Calls</label>
                 <input name="voice_company_name" value="{voice_name}" placeholder="e.g. ABC Roofing" style="display:block; width:100%; padding:12px; margin-bottom:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
                 <p style="color:#64748b; font-size:13px; margin-bottom:20px;">The AI will say: "Hi, this is [your company name] following up on your roofing inquiry."</p>
+                <label style="display:block; color:#c7d2fe; font-size:14px; font-weight:600; margin-bottom:6px; margin-top:18px;">Google Review Link</label>
+                <input name="google_review_link" value="{review_link}" placeholder="https://g.page/r/your-business/review" style="display:block; width:100%; padding:12px; margin-bottom:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <p style="color:#64748b; font-size:13px; margin-bottom:20px;">After a job is marked Won, the homeowner gets an automatic SMS asking for a Google review.</p>
                 <button type="submit" style="width:100%; padding:14px; background:#2563eb; color:white; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Save Settings</button>
             </form>
             <a href="/dashboard" style="display:block; text-align:center; margin-top:16px; color:#94a3b8; text-decoration:none; font-size:14px;">← Back to Dashboard</a>
@@ -1113,7 +1131,7 @@ def contractor_settings_page(request: Request):
 
 
 @app.post("/contractor-settings")
-def contractor_settings_save(request: Request, voice_company_name: str = Form("")):
+def contractor_settings_save(request: Request, voice_company_name: str = Form(""), google_review_link: str = Form("")):
     contractor_id = request.session.get("contractor_id")
     if not contractor_id:
         return RedirectResponse(url="/contractor-login", status_code=303)
@@ -1121,12 +1139,54 @@ def contractor_settings_save(request: Request, voice_company_name: str = Form(""
     from db import get_connection
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE contractors SET voice_company_name = %s WHERE id = %s", (voice_company_name.strip(), contractor_id))
+    cur.execute(
+        "UPDATE contractors SET voice_company_name = %s, google_review_link = %s WHERE id = %s",
+        (voice_company_name.strip(), google_review_link.strip(), contractor_id)
+    )
     conn.commit()
     cur.close()
     conn.close()
 
     return RedirectResponse(url="/contractor-settings", status_code=303)
+
+def send_review_request_sms(customer_phone: str, customer_name: str, contractor_name: str, google_review_link: str):
+    """Send a Google review request SMS to the homeowner after job completion."""
+    if not google_review_link:
+        print("REVIEW SMS SKIPPED: no Google review link set")
+        return
+
+    try:
+        twilio_sid = os.getenv("TWILIO_SID")
+        twilio_auth = os.getenv("TWILIO_AUTH")
+        twilio_number = os.getenv("TWILIO_NUMBER")
+
+        if not all([twilio_sid, twilio_auth, twilio_number, customer_phone]):
+            return
+
+        twilio_client = Client(twilio_sid, twilio_auth)
+
+        clean_phone = re.sub(r"[^\d+]", "", customer_phone)
+        if not clean_phone.startswith("+"):
+            if len(clean_phone) == 10:
+                clean_phone = "+1" + clean_phone
+            elif len(clean_phone) == 11 and clean_phone.startswith("1"):
+                clean_phone = "+" + clean_phone
+
+        sms_body = (
+            f"Hi {customer_name}, thank you for choosing {contractor_name}! "
+            f"We'd really appreciate a quick Google review — it helps other homeowners find us. "
+            f"{google_review_link} — Thank you!"
+        )
+
+        message = twilio_client.messages.create(
+            body=sms_body,
+            from_=twilio_number,
+            to=clean_phone,
+        )
+        print(f"REVIEW REQUEST SMS sent: {message.sid}")
+
+    except Exception as e:
+        print(f"REVIEW SMS ERROR: {e}")
 
 @app.get("/contractor-roi", response_class=HTMLResponse)
 def contractor_roi_page(request: Request):
@@ -1288,6 +1348,36 @@ def set_job_value_post(request: Request, lead_id: int = Form(...), job_value: fl
         return RedirectResponse(url="/contractor-login", status_code=303)
 
     update_lead_job_value(lead_id, job_value, contractor_id=contractor_id)
+
+    # Send review request SMS to the homeowner
+    try:
+        contractor = get_contractor_by_id(contractor_id)
+        google_link = ""
+        if contractor:
+            from db import get_connection
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT google_review_link FROM contractors WHERE id = %s", (contractor_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                google_link = row[0]
+            cur.close()
+            conn.close()
+
+        if google_link:
+            # Get the lead's phone and name
+            leads = read_all_leads(contractor_id=contractor_id)
+            lead = next((l for l in leads if l.get("id") == lead_id), None)
+            if lead and lead.get("phone"):
+                send_review_request_sms(
+                    customer_phone=lead["phone"],
+                    customer_name=lead.get("name", "there"),
+                    contractor_name=contractor.get("company_name", "your roofing company"),
+                    google_review_link=google_link,
+                )
+    except Exception as e:
+        print(f"REVIEW TRIGGER ERROR: {e}")
+
     return RedirectResponse(url="/contractor-roi", status_code=303)
 
 @app.get("/leads", response_class=HTMLResponse)
