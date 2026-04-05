@@ -74,6 +74,12 @@ def init_db():
     except Exception:
         pass
 
+    # Add voice branding to contractors
+    try:
+        cur.execute("ALTER TABLE contractors ADD COLUMN IF NOT EXISTS voice_company_name TEXT DEFAULT ''")
+    except Exception:
+        pass
+
     conn.commit()
     cur.close()
     conn.close()

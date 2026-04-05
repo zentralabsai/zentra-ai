@@ -1078,6 +1078,54 @@ def contractor_export(request: Request):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+@app.get("/contractor-settings", response_class=HTMLResponse)
+def contractor_settings_page(request: Request):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    contractor = get_contractor_by_id(contractor_id)
+    voice_name = contractor.get("voice_company_name", "") if contractor else ""
+
+    return f"""
+    <html>
+    <head><title>Settings | Kazfen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <body style="font-family:-apple-system,sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px;">
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:32px; border-radius:24px; width:100%; max-width:480px;">
+            <img src="/logo.png" alt="Kazfen" style="width:140px; margin-bottom:24px;">
+            <h2 style="margin-bottom:6px;">AI Call Settings</h2>
+            <p style="color:#94a3b8; font-size:14px; margin-bottom:24px;">Customize how the AI introduces itself on calls to your leads.</p>
+            <form method="post" action="/contractor-settings">
+                <label style="display:block; color:#c7d2fe; font-size:14px; font-weight:600; margin-bottom:6px;">Company Name for AI Calls</label>
+                <input name="voice_company_name" value="{voice_name}" placeholder="e.g. ABC Roofing" style="display:block; width:100%; padding:12px; margin-bottom:8px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <p style="color:#64748b; font-size:13px; margin-bottom:20px;">The AI will say: "Hi, this is [your company name] following up on your roofing inquiry."</p>
+                <button type="submit" style="width:100%; padding:14px; background:#2563eb; color:white; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Save Settings</button>
+            </form>
+            <a href="/dashboard" style="display:block; text-align:center; margin-top:16px; color:#94a3b8; text-decoration:none; font-size:14px;">← Back to Dashboard</a>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.post("/contractor-settings")
+def contractor_settings_save(request: Request, voice_company_name: str = Form("")):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    from db import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE contractors SET voice_company_name = %s WHERE id = %s", (voice_company_name.strip(), contractor_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return RedirectResponse(url="/contractor-settings", status_code=303)
+
 @app.get("/leads", response_class=HTMLResponse)
 def view_leads(request: Request):
     if not request.session.get("admin_logged_in"):
@@ -1631,8 +1679,25 @@ async def twilio_voice_outbound(request: Request):
 
     response = VoiceResponse()
 
-    greeting = f"Hi {lead_name}, this is Kazfen's roofing assistant following up on your inquiry. I just have a couple quick questions to get you connected with the right specialist. What roofing issue are you dealing with?"
+# Use contractor's white-label name if available
+    voice_brand = "Kazfen's roofing assistant"
+    if call_sid in VOICE_SESSIONS:
+        ctx = VOICE_SESSIONS[call_sid].get("lead_context", "")
+        # Check if contractor has custom voice name
+        try:
+            from db import get_connection
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT voice_company_name FROM contractors WHERE id = (SELECT contractor_id FROM leads WHERE phone = %s ORDER BY id DESC LIMIT 1)", (lead_phone,))
+            row = cur.fetchone()
+            if row and row[0]:
+                voice_brand = row[0]
+            cur.close()
+            conn.close()
+        except Exception:
+            pass
 
+    greeting = f"Hi {lead_name}, this is {voice_brand} following up on your inquiry. I just have a couple quick questions to get you connected with the right specialist. What roofing issue are you dealing with?"
     if call_sid in VOICE_SESSIONS:
         VOICE_SESSIONS[call_sid]["history"].append({
             "role": "assistant", "content": greeting
