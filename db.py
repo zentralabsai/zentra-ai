@@ -394,8 +394,7 @@ def update_contractor_plan(contractor_id: int, plan: str, lead_limit: int):
     conn.close()
 # ROI tracking
 
-    def update_lead_job_value(lead_id: int, job_value: float, contractor_id: int = None):
-                """Set the dollar value of a won job."""
+def update_lead_job_value(lead_id, job_value, contractor_id=None):
     conn = get_connection()
     cur = conn.cursor()
     if contractor_id:
@@ -411,7 +410,6 @@ def update_contractor_plan(contractor_id: int, plan: str, lead_limit: int):
     conn.commit()
     cur.close()
     conn.close()
-
 
 def get_roi_stats(contractor_id: int) -> dict:
     """Calculate ROI metrics for a contractor."""
