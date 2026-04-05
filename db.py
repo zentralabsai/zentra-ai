@@ -3,6 +3,7 @@ import csv
 import io
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import bcrypt
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -13,12 +14,30 @@ def get_connection():
 
 
 def init_db():
-    """Create the leads table if it doesn't exist."""
+    """Create all tables if they don't exist."""
     conn = get_connection()
     cur = conn.cursor()
+
+    # Contractors table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS contractors (
+            id SERIAL PRIMARY KEY,
+            company_name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            phone TEXT DEFAULT '',
+            location TEXT DEFAULT '',
+            plan TEXT DEFAULT 'launch',
+            active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    # Leads table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS leads (
             id SERIAL PRIMARY KEY,
+            contractor_id INTEGER REFERENCES contractors(id),
             name TEXT DEFAULT '',
             phone TEXT DEFAULT '',
             email TEXT DEFAULT '',
@@ -38,11 +57,108 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+
+    # Add contractor_id column if it doesn't exist (migration for existing table)
+    try:
+        cur.execute("""
+            ALTER TABLE leads ADD COLUMN IF NOT EXISTS contractor_id INTEGER REFERENCES contractors(id)
+        """)
+    except Exception:
+        pass
+
     conn.commit()
     cur.close()
     conn.close()
-    print("DATABASE: leads table ready")
+    print("DATABASE: all tables ready")
 
+
+# ==============================================================================
+# CONTRACTOR AUTH
+# ==============================================================================
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def check_password(password: str, password_hash: str) -> bool:
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+
+
+def create_contractor(company_name: str, email: str, password: str, phone: str = "", location: str = "", plan: str = "launch") -> dict:
+    """Create a new contractor account. Returns the contractor dict or None if email exists."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    # Check if email already exists
+    cur.execute("SELECT id FROM contractors WHERE email = %s", (email.lower(),))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        return None
+
+    pw_hash = hash_password(password)
+    cur.execute("""
+        INSERT INTO contractors (company_name, email, password_hash, phone, location, plan)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, company_name, email, phone, location, plan, active, created_at
+    """, (company_name, email.lower(), pw_hash, phone, location, plan))
+
+    contractor = dict(cur.fetchone())
+    conn.commit()
+    cur.close()
+    conn.close()
+    return contractor
+
+
+def authenticate_contractor(email: str, password: str) -> dict:
+    """Authenticate a contractor. Returns contractor dict or None."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT * FROM contractors WHERE email = %s AND active = TRUE", (email.lower(),))
+    contractor = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not contractor:
+        return None
+
+    contractor = dict(contractor)
+    if not check_password(password, contractor["password_hash"]):
+        return None
+
+    # Don't return the hash
+    del contractor["password_hash"]
+    return contractor
+
+
+def get_contractor_by_id(contractor_id: int) -> dict:
+    """Get contractor by ID."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        "SELECT id, company_name, email, phone, location, plan, active, created_at FROM contractors WHERE id = %s",
+        (contractor_id,)
+    )
+    contractor = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(contractor) if contractor else None
+
+
+def get_all_contractors():
+    """Get all contractors (admin only)."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT id, company_name, email, phone, location, plan, active, created_at FROM contractors ORDER BY id DESC")
+    contractors = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(c) for c in contractors]
+
+
+# ==============================================================================
+# LEADS — with contractor filtering
+# ==============================================================================
 
 def save_lead(
     name: str,
@@ -61,21 +177,22 @@ def save_lead(
     assigned_phone: str = "",
     message: str = "",
     status: str = "New",
+    contractor_id: int = None,
 ):
     """Insert a new lead into the database."""
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO leads (
-            name, phone, email, location, roof_type, issue, urgency,
+            contractor_id, name, phone, email, location, roof_type, issue, urgency,
             insurance_status, inspection_timing, message, lead_score,
             lead_temperature, assigned_contractor, assigned_email,
             assigned_phone, status
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
     """, (
-        name, phone, email, location, roof_type, issue, urgency,
+        contractor_id, name, phone, email, location, roof_type, issue, urgency,
         insurance_status, inspection_timing, message, lead_score,
         lead_temperature, assigned_contractor, assigned_email,
         assigned_phone, status,
@@ -85,56 +202,70 @@ def save_lead(
     conn.close()
 
 
-def read_all_leads():
-    """Read all leads from the database, newest first."""
+def read_all_leads(contractor_id: int = None):
+    """Read leads from the database. If contractor_id is provided, filter by contractor."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM leads ORDER BY id DESC")
+    if contractor_id:
+        cur.execute("SELECT * FROM leads WHERE contractor_id = %s ORDER BY id DESC", (contractor_id,))
+    else:
+        cur.execute("SELECT * FROM leads ORDER BY id DESC")
     leads = cur.fetchall()
     cur.close()
     conn.close()
-    # Convert to list of plain dicts (for compatibility with existing code)
     return [dict(row) for row in leads]
 
 
-def update_lead_status(lead_id: int, status: str):
-    """Update the status of a specific lead by ID."""
+def update_lead_status(lead_id: int, status: str, contractor_id: int = None):
+    """Update the status of a specific lead. If contractor_id provided, verify ownership."""
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("UPDATE leads SET status = %s WHERE id = %s", (status, lead_id))
+    if contractor_id:
+        cur.execute("UPDATE leads SET status = %s WHERE id = %s AND contractor_id = %s", (status, lead_id, contractor_id))
+    else:
+        cur.execute("UPDATE leads SET status = %s WHERE id = %s", (status, lead_id))
     conn.commit()
     cur.close()
     conn.close()
 
 
-def get_leads_by_status(status: str):
-    """Get all leads with a specific status."""
+def get_leads_by_status(status: str, contractor_id: int = None):
+    """Get leads with a specific status, optionally filtered by contractor."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM leads WHERE status = %s ORDER BY id DESC", (status,))
+    if contractor_id:
+        cur.execute("SELECT * FROM leads WHERE status = %s AND contractor_id = %s ORDER BY id DESC", (status, contractor_id))
+    else:
+        cur.execute("SELECT * FROM leads WHERE status = %s ORDER BY id DESC", (status,))
     leads = cur.fetchall()
     cur.close()
     conn.close()
     return [dict(row) for row in leads]
 
 
-def get_leads_by_location(location: str):
-    """Get all leads matching a location (case-insensitive partial match)."""
+def get_leads_by_location(location: str, contractor_id: int = None):
+    """Get leads matching a location, optionally filtered by contractor."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute(
-        "SELECT * FROM leads WHERE LOWER(location) LIKE %s ORDER BY id DESC",
-        (f"%{location.lower()}%",)
-    )
+    if contractor_id:
+        cur.execute(
+            "SELECT * FROM leads WHERE LOWER(location) LIKE %s AND contractor_id = %s ORDER BY id DESC",
+            (f"%{location.lower()}%", contractor_id)
+        )
+    else:
+        cur.execute(
+            "SELECT * FROM leads WHERE LOWER(location) LIKE %s ORDER BY id DESC",
+            (f"%{location.lower()}%",)
+        )
     leads = cur.fetchall()
     cur.close()
     conn.close()
     return [dict(row) for row in leads]
 
 
-def export_leads_csv() -> str:
-    """Export all leads as a CSV string."""
-    leads = read_all_leads()
+def export_leads_csv(contractor_id: int = None) -> str:
+    """Export leads as a CSV string, optionally filtered by contractor."""
+    leads = read_all_leads(contractor_id=contractor_id)
     if not leads:
         return ""
 
@@ -148,18 +279,24 @@ def export_leads_csv() -> str:
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for lead in leads:
-        # Convert datetime to string for CSV
         lead["created_at"] = str(lead.get("created_at", ""))
         writer.writerow({k: lead.get(k, "") for k in fieldnames})
 
     return output.getvalue()
 
 
-def get_lead_stats():
-    """Get lead statistics for the dashboard."""
+def get_lead_stats(contractor_id: int = None):
+    """Get lead statistics, optionally filtered by contractor."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("""
+
+    where_clause = ""
+    params = ()
+    if contractor_id:
+        where_clause = "WHERE contractor_id = %s"
+        params = (contractor_id,)
+
+    cur.execute(f"""
         SELECT
             COUNT(*) as total_leads,
             COUNT(*) FILTER (WHERE lead_temperature = 'HOT') as hot_leads,
@@ -170,7 +307,8 @@ def get_lead_stats():
             COUNT(*) FILTER (WHERE status = 'Won') as won_leads,
             COUNT(*) FILTER (WHERE status = 'Lost') as lost_leads
         FROM leads
-    """)
+        {where_clause}
+    """, params)
     stats = dict(cur.fetchone())
     cur.close()
     conn.close()

@@ -14,3 +14,4 @@ google-auth
 google-api-python-client
 pytz
 psycopg2-binary
+bcrypt

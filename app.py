@@ -21,7 +21,12 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from fastapi import Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-from db import init_db, save_lead, read_all_leads, update_lead_status, export_leads_csv, get_lead_stats, get_leads_by_location
+from db import (
+    init_db, save_lead, read_all_leads, update_lead_status,
+    export_leads_csv, get_lead_stats, get_leads_by_location,
+    create_contractor, authenticate_contractor, get_contractor_by_id,
+    get_all_contractors,
+)
 load_dotenv()
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
@@ -768,6 +773,302 @@ def admin_login(request: Request, username: str = Form(...), password: str = For
 def admin_logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/admin-login", status_code=303)
+
+# ==============================================================================
+# CONTRACTOR AUTH & DASHBOARD
+# ==============================================================================
+
+@app.get("/contractor-signup", response_class=HTMLResponse)
+def contractor_signup_page():
+    return """
+    <html>
+    <head><title>Contractor Signup | Kazfen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <body style="font-family:-apple-system,sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px;">
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:32px; border-radius:24px; width:100%; max-width:420px;">
+            <img src="/logo.png" alt="Kazfen" style="width:140px; margin-bottom:24px;">
+            <h2 style="margin-bottom:6px;">Create Your Account</h2>
+            <p style="color:#94a3b8; font-size:14px; margin-bottom:24px;">Start managing your roofing leads.</p>
+            <form method="post" action="/contractor-signup">
+                <input name="company_name" placeholder="Company Name" required style="display:block; width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <input name="email" type="email" placeholder="Email" required style="display:block; width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <input name="phone" placeholder="Phone" style="display:block; width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <input name="location" placeholder="City / Service Area" style="display:block; width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <input name="password" type="password" placeholder="Password" required minlength="8" style="display:block; width:100%; padding:12px; margin-bottom:20px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <button type="submit" style="width:100%; padding:14px; background:#2563eb; color:white; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Create Account</button>
+            </form>
+            <p style="text-align:center; margin-top:16px; color:#94a3b8; font-size:14px;">Already have an account? <a href="/contractor-login" style="color:#3b82f6;">Log in</a></p>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.post("/contractor-signup")
+def contractor_signup_post(
+    request: Request,
+    company_name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    phone: str = Form(""),
+    location: str = Form(""),
+):
+    contractor = create_contractor(
+        company_name=company_name,
+        email=email,
+        password=password,
+        phone=phone,
+        location=location,
+    )
+    if not contractor:
+        return HTMLResponse("""
+        <html><body style="font-family:sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; height:100vh;">
+            <div style="text-align:center;">
+                <h2>Email already registered</h2>
+                <p style="color:#94a3b8;">Try <a href="/contractor-login" style="color:#3b82f6;">logging in</a> instead.</p>
+            </div>
+        </body></html>
+        """)
+
+    request.session["contractor_id"] = contractor["id"]
+    request.session["contractor_name"] = contractor["company_name"]
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.get("/contractor-login", response_class=HTMLResponse)
+def contractor_login_page():
+    return """
+    <html>
+    <head><title>Contractor Login | Kazfen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <body style="font-family:-apple-system,sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px;">
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:32px; border-radius:24px; width:100%; max-width:420px;">
+            <img src="/logo.png" alt="Kazfen" style="width:140px; margin-bottom:24px;">
+            <h2 style="margin-bottom:6px;">Contractor Login</h2>
+            <p style="color:#94a3b8; font-size:14px; margin-bottom:24px;">Access your lead dashboard.</p>
+            <form method="post" action="/contractor-login">
+                <input name="email" type="email" placeholder="Email" required style="display:block; width:100%; padding:12px; margin-bottom:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <input name="password" type="password" placeholder="Password" required style="display:block; width:100%; padding:12px; margin-bottom:20px; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.06); color:white; font-size:15px; box-sizing:border-box;" />
+                <button type="submit" style="width:100%; padding:14px; background:#2563eb; color:white; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer;">Log In</button>
+            </form>
+            <p style="text-align:center; margin-top:16px; color:#94a3b8; font-size:14px;">Need an account? <a href="/contractor-signup" style="color:#3b82f6;">Sign up</a></p>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.post("/contractor-login")
+def contractor_login_post(request: Request, email: str = Form(...), password: str = Form(...)):
+    contractor = authenticate_contractor(email, password)
+    if not contractor:
+        return HTMLResponse("""
+        <html><body style="font-family:sans-serif; background:#0b1020; color:white; display:flex; align-items:center; justify-content:center; height:100vh;">
+            <div style="text-align:center;">
+                <h2>Invalid email or password</h2>
+                <p style="color:#94a3b8;"><a href="/contractor-login" style="color:#3b82f6;">Try again</a></p>
+            </div>
+        </body></html>
+        """)
+
+    request.session["contractor_id"] = contractor["id"]
+    request.session["contractor_name"] = contractor["company_name"]
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.get("/contractor-logout")
+def contractor_logout(request: Request):
+    request.session.pop("contractor_id", None)
+    request.session.pop("contractor_name", None)
+    return RedirectResponse(url="/contractor-login", status_code=303)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def contractor_dashboard(request: Request):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    contractor_name = request.session.get("contractor_name", "Your Company")
+    leads = read_all_leads(contractor_id=contractor_id)
+
+    total_leads = len(leads)
+    hot_leads = sum(1 for l in leads if l.get("lead_temperature") == "HOT")
+    warm_leads = sum(1 for l in leads if l.get("lead_temperature") == "WARM")
+    cold_leads = sum(1 for l in leads if l.get("lead_temperature") == "COLD")
+    contacted_leads = sum(1 for l in leads if l.get("status") == "Contacted")
+    booked_leads = sum(1 for l in leads if l.get("status") == "Inspection Booked")
+    won_leads = sum(1 for l in leads if l.get("status") == "Won")
+    lost_leads = sum(1 for l in leads if l.get("status") == "Lost")
+    avg_job_value = 8000
+    close_rate = 0.30
+    pipeline_value = total_leads * avg_job_value
+    expected_revenue = int(pipeline_value * close_rate)
+
+    rows = ""
+    for lead in leads:
+        temperature = lead.get("lead_temperature", "")
+        score = lead.get("lead_score", "")
+        status = lead.get("status", "New")
+
+        badge_color = "#16a34a"
+        if temperature == "WARM": badge_color = "#f59e0b"
+        elif temperature == "COLD": badge_color = "#6b7280"
+
+        status_color = "#2563eb"
+        if status == "Contacted": status_color = "#7c3aed"
+        elif status == "Inspection Booked": status_color = "#0f766e"
+        elif status == "Won": status_color = "#16a34a"
+        elif status == "Lost": status_color = "#dc2626"
+
+        rows += f"""
+        <tr>
+            <td>{lead.get("name", "")}</td>
+            <td>{lead.get("phone", "")}</td>
+            <td>{lead.get("email", "")}</td>
+            <td>{lead.get("location", "")}</td>
+            <td>{lead.get("roof_type", "")}</td>
+            <td>{lead.get("issue", "")}</td>
+            <td>{lead.get("urgency", "")}</td>
+            <td>{lead.get("insurance_status", "")}</td>
+            <td>{lead.get("inspection_timing", "")}</td>
+            <td>{lead.get("message", "")}</td>
+            <td>{score}</td>
+            <td>
+                <span style="background:{badge_color}; color:white; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700;">
+                    {temperature}
+                </span>
+            </td>
+            <td>
+                <span style="background:{status_color}; color:white; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:700;">
+                    {status}
+                </span>
+            </td>
+            <td>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <a href="/contractor-update-status?lead_id={lead.get('id')}&status=New" class="mini-btn">New</a>
+                    <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Contacted" class="mini-btn">Contacted</a>
+                    <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Inspection%20Booked" class="mini-btn">Booked</a>
+                    <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Won" class="mini-btn">Won</a>
+                    <a href="/contractor-update-status?lead_id={lead.get('id')}&status=Lost" class="mini-btn">Lost</a>
+                </div>
+            </td>
+        </tr>
+        """
+
+    if not rows:
+        rows = '<tr><td colspan="14" style="text-align:center; padding:30px; color:#666;">No leads yet.</td></tr>'
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{contractor_name} — Kazfen Dashboard</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+            body {{ font-family: -apple-system, sans-serif; background: #f5f7fb; margin: 0; padding: 30px; color: #111827; }}
+            .wrap {{ max-width: 1600px; margin: 0 auto; }}
+            .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }}
+            .title {{ font-size: 28px; font-weight: 800; }}
+            .sub {{ color: #6b7280; margin-top: 6px; font-size: 14px; }}
+            .kpi-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }}
+            .kpi-card {{ background: white; border-radius: 16px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }}
+            .kpi-label {{ color: #6b7280; font-size: 13px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.03em; }}
+            .kpi-value {{ font-size: 28px; font-weight: 800; color: #111827; }}
+            .card {{ background: white; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); overflow: hidden; }}
+            .table-wrap {{ overflow-x: auto; }}
+            table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+            th {{ background: #111827; color: white; text-align: left; padding: 14px; position: sticky; top: 0; }}
+            td {{ padding: 14px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }}
+            tr:hover {{ background: #f9fafb; }}
+            .btn {{ display: inline-block; text-decoration: none; background: #2563eb; color: white; padding: 10px 16px; border-radius: 10px; font-weight: 700; font-size: 14px; }}
+            .btn-outline {{ background: transparent; border: 1px solid #e5e7eb; color: #111827; }}
+            .mini-btn {{ display: inline-block; text-decoration: none; background: #e5e7eb; color: #111827; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; }}
+            .mini-btn:hover {{ background: #d1d5db; }}
+            @media (max-width: 900px) {{ .kpi-grid {{ grid-template-columns: 1fr 1fr; }} }}
+            @media (max-width: 600px) {{ .kpi-grid {{ grid-template-columns: 1fr; }} body {{ padding: 16px; }} }}
+        </style>
+    </head>
+    <body>
+        <div class="wrap">
+            <div class="header">
+                <div>
+                    <div class="title">{contractor_name}</div>
+                    <div class="sub">Kazfen Lead Dashboard</div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <a class="btn" href="/contractor-export">Export CSV</a>
+                    <a class="btn btn-outline" href="/contractor-logout">Logout</a>
+                </div>
+            </div>
+
+            <div class="kpi-grid">
+                <div class="kpi-card"><div class="kpi-label">Total Leads</div><div class="kpi-value">{total_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Hot Leads</div><div class="kpi-value">{hot_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Warm Leads</div><div class="kpi-value">{warm_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Cold Leads</div><div class="kpi-value">{cold_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Contacted</div><div class="kpi-value">{contacted_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Booked</div><div class="kpi-value">{booked_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Won</div><div class="kpi-value">{won_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Lost</div><div class="kpi-value">{lost_leads}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Avg Job Value</div><div class="kpi-value">${avg_job_value:,}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Close Rate</div><div class="kpi-value">{int(close_rate * 100)}%</div></div>
+                <div class="kpi-card"><div class="kpi-label">Pipeline Value</div><div class="kpi-value">${pipeline_value:,}</div></div>
+                <div class="kpi-card"><div class="kpi-label">Expected Revenue</div><div class="kpi-value">${expected_revenue:,}</div></div>
+            </div>
+
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th><th>Phone</th><th>Email</th><th>Location</th>
+                                <th>Roof Type</th><th>Issue</th><th>Urgency</th><th>Insurance</th>
+                                <th>Inspection Timing</th><th>Message</th><th>Score</th>
+                                <th>Temperature</th><th>Status</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.get("/contractor-update-status")
+def contractor_update_status(request: Request, lead_id: int, status: str):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    allowed_statuses = {"New", "Contacted", "Inspection Booked", "Won", "Lost"}
+    if status not in allowed_statuses:
+        return {"error": "Invalid status"}
+
+    update_lead_status(lead_id, status, contractor_id=contractor_id)
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.get("/contractor-export")
+def contractor_export(request: Request):
+    contractor_id = request.session.get("contractor_id")
+    if not contractor_id:
+        return RedirectResponse(url="/contractor-login", status_code=303)
+
+    csv_data = export_leads_csv(contractor_id=contractor_id)
+    contractor_name = request.session.get("contractor_name", "leads")
+    filename = f"{contractor_name.lower().replace(' ', '-')}-leads.csv"
+
+    return PlainTextResponse(
+        csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @app.get("/leads", response_class=HTMLResponse)
 def view_leads(request: Request):
