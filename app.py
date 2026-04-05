@@ -21,7 +21,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from fastapi import Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
-
+from db import init_db, save_lead, read_all_leads, update_lead_status, export_leads_csv, get_lead_stats, get_leads_by_location
 load_dotenv()
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
@@ -65,6 +65,7 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+init_db()
 
 @app.get("/", include_in_schema=False)
 def home():
@@ -137,11 +138,13 @@ async def receive_lead(request: Request):
     assigned_contractor = "Default Contractor"
     status = "New"
 
-    with open("leads.csv", "a") as f:
-        f.write(
-        f"{name},{phone},{email},{location},{roof_type},{issue},{urgency},"
-        f"{insurance_status},{inspection_timing},{message},{lead_score},{lead_temperature},"
-        f"{assigned_contractor},{status}\n"
+    save_lead(
+        name=name, phone=phone, email=email, location=location,
+        roof_type=roof_type, issue=issue, urgency=urgency,
+        insurance_status=insurance_status, inspection_timing=inspection_timing,
+        lead_score=lead_score, lead_temperature=lead_temperature,
+        assigned_contractor=assigned_contractor, assigned_email="",
+        assigned_phone="", message=message, status=status,
     )
     
     try:
@@ -188,7 +191,6 @@ async def receive_lead(request: Request):
 
     return {"message": "Lead submitted successfully"}
 
-LEADS_FILE = "leads.csv"
 BOOKING_LINK = "https://calendly.com/bookings-kazfen/30min"
 CONTRACTOR_ROUTES = {
     "miami": {
@@ -377,61 +379,6 @@ def score_lead(
     return score, temperature
 
 
-def save_lead(
-    name: str,
-    phone: str,
-    email: str,
-    location: str,
-    roof_type: str,
-    issue: str,
-    urgency: str,
-    insurance_status: str,
-    inspection_timing: str,
-    lead_score: int,
-    lead_temperature: str,
-    assigned_contractor: str,
-    assigned_email: str,
-    assigned_phone: str,
-):
-    file_exists = os.path.exists(LEADS_FILE)
-
-    with open(LEADS_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-
-        if not file_exists:
-            writer.writerow([
-                "name",
-                "phone",
-                "email",
-                "location",
-                "roof_type",
-                "issue",
-                "urgency",
-                "insurance_status",
-                "inspection_timing",
-                "lead_score",
-                "lead_temperature",
-                "assigned_contractor",
-                "assigned_email",
-                "assigned_phone",
-            ])
-
-        writer.writerow([
-            name,
-            phone,
-            email,
-            location,
-            roof_type,
-            issue,
-            urgency,
-            insurance_status,
-            inspection_timing,
-            lead_score,
-            lead_temperature,
-            assigned_contractor,
-            assigned_email,
-            assigned_phone,
-        ])
         
 
 
@@ -762,66 +709,28 @@ def generate_inbound_reply(user_message: str, channel: str = "webchat") -> str:
     result = ask_ai(user_message)
     return result["ai_response"]
 
-def read_all_leads():
-    if not os.path.exists(LEADS_FILE):
-        return []
 
-    with open(LEADS_FILE, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
-
-
-def write_all_leads(leads):
-    fieldnames = [
-        "name",
-        "phone",
-        "email",
-        "location",
-        "roof_type",
-        "issue",
-        "urgency",
-        "insurance_status",
-        "inspection_timing",
-        "lead_score",
-        "lead_temperature",
-        "assigned_contractor",
-        "assigned_email",
-        "assigned_phone",
-        "status",
-    ]
-
-    with open(LEADS_FILE, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(leads)
 
 
 # ---- STATUS UPDATE ROUTE (PASTE HERE) ----
 @app.get("/update-status")
-def update_status(index: int, status: str):
+def update_status(lead_id: int, status: str):
     allowed_statuses = {"New", "Contacted", "Inspection Booked", "Won", "Lost"}
-
     if status not in allowed_statuses:
         return {"error": "Invalid status"}
-
-    leads = read_all_leads()
-
-    if index < 0 or index >= len(leads):
-        return {"error": "Invalid lead index"}
-
-    leads[index]["status"] = status
-    write_all_leads(leads)
-
-    from fastapi.responses import RedirectResponse
+    update_lead_status(lead_id, status)
+    return RedirectResponse(url="/leads", status_code=303)
+    
 
 # ---- YOUR LEADS DASHBOARD (ALREADY EXISTS BELOW) ----
 
 @app.get("/export-leads")
 def export_leads():
-    return FileResponse(
-        LEADS_FILE,
+    csv_data = export_leads_csv()
+    return PlainTextResponse(
+        csv_data,
         media_type="text/csv",
-        filename="kazfen-leads.csv"
+        headers={"Content-Disposition": "attachment; filename=kazfen-leads.csv"}
     )
 
 ADMIN_USERNAME = "kazfenadmin"
@@ -878,11 +787,9 @@ def view_leads(request: Request):
     close_rate = 0.30
     pipeline_value = total_leads * avg_job_value
     expected_revenue = int(pipeline_value * close_rate)
-    leads.reverse()
 
     rows = ""
-    for reversed_index, lead in enumerate(leads):
-        original_index = len(leads) - 1 - reversed_index
+    for lead in leads:
         temperature = lead.get("lead_temperature", "")
         score = lead.get("lead_score", "")
         status = lead.get("status", "New")
@@ -943,11 +850,11 @@ def view_leads(request: Request):
             </td>
             <td>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                    <a href="/update-status?index={original_index}&status=New" class="mini-btn">New</a>
-                    <a href="/update-status?index={original_index}&status=Contacted" class="mini-btn">Contacted</a>
-                    <a href="/update-status?index={original_index}&status=Inspection%20Booked" class="mini-btn">Booked</a>
-                    <a href="/update-status?index={original_index}&status=Won" class="mini-btn">Won</a>
-                    <a href="/update-status?index={original_index}&status=Lost" class="mini-btn">Lost</a>
+                    <a href="/update-status?lead_id={lead.get('id')}&status=New" class="mini-btn">New</a>
+                    <a href="/update-status?lead_id={lead.get('id')}&status=Contacted" class="mini-btn">Contacted</a>
+                    <a href="/update-status?lead_id={lead.get('id')}&status=Inspection%20Booked" class="mini-btn">Booked</a>
+                    <a href="/update-status?lead_id={lead.get('id')}&status=Won" class="mini-btn">Won</a>
+                    <a href="/update-status?lead_id={lead.get('id')}&status=Lost" class="mini-btn">Lost</a>
                 </div>
             </td>
         </tr>
@@ -2846,7 +2753,7 @@ async def api_calendar_auto_book(request: Request):
 
     data = await request.json()
 
-    result = auto_book_hot_lead(
+    result = auto_book_if_qualified(
         lead_name=data.get("name", "Lead"),
         lead_phone=data.get("phone", ""),
         lead_email=data.get("email", ""),
