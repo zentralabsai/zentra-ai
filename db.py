@@ -66,6 +66,14 @@ def init_db():
     except Exception:
         pass
 
+    # Add Stripe fields to contractors
+    try:
+        cur.execute("ALTER TABLE contractors ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT DEFAULT ''")
+        cur.execute("ALTER TABLE contractors ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT DEFAULT ''")
+        cur.execute("ALTER TABLE contractors ADD COLUMN IF NOT EXISTS lead_limit INTEGER DEFAULT 100")
+    except Exception:
+        pass
+
     conn.commit()
     cur.close()
     conn.close()
@@ -313,3 +321,56 @@ def get_lead_stats(contractor_id: int = None):
     cur.close()
     conn.close()
     return stats
+def update_contractor_stripe(contractor_id: int, stripe_customer_id: str, stripe_subscription_id: str):
+    """Link Stripe customer/subscription to a contractor."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE contractors SET stripe_customer_id = %s, stripe_subscription_id = %s WHERE id = %s",
+        (stripe_customer_id, stripe_subscription_id, contractor_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_contractor_by_stripe_customer(stripe_customer_id: str) -> dict:
+    """Find contractor by their Stripe customer ID."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        "SELECT id, company_name, email, phone, location, plan, lead_limit, stripe_customer_id, stripe_subscription_id FROM contractors WHERE stripe_customer_id = %s",
+        (stripe_customer_id,)
+    )
+    contractor = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(contractor) if contractor else None
+
+
+def get_monthly_lead_count(contractor_id: int) -> int:
+    """Count leads for a contractor in the current calendar month."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COUNT(*) FROM leads
+        WHERE contractor_id = %s
+        AND created_at >= date_trunc('month', NOW())
+    """, (contractor_id,))
+    count = cur.fetchone()[0]
+    cur.close()
+    conn.close()
+    return count
+
+
+def update_contractor_plan(contractor_id: int, plan: str, lead_limit: int):
+    """Update contractor's plan and lead limit."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE contractors SET plan = %s, lead_limit = %s WHERE id = %s",
+        (plan, lead_limit, contractor_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()

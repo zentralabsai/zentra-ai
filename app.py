@@ -25,7 +25,8 @@ from db import (
     init_db, save_lead, read_all_leads, update_lead_status,
     export_leads_csv, get_lead_stats, get_leads_by_location,
     create_contractor, authenticate_contractor, get_contractor_by_id,
-    get_all_contractors,
+    get_all_contractors, update_contractor_stripe, get_contractor_by_stripe_customer,
+    get_monthly_lead_count, update_contractor_plan,
 )
 load_dotenv()
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -142,7 +143,7 @@ async def receive_lead(request: Request):
 
     assigned_contractor = "Default Contractor"
     status = "New"
-
+    contractor_id = None
     save_lead(
         name=name, phone=phone, email=email, location=location,
         roof_type=roof_type, issue=issue, urgency=urgency,
@@ -151,6 +152,13 @@ async def receive_lead(request: Request):
         assigned_contractor=assigned_contractor, assigned_email="",
         assigned_phone="", message=message, status=status,
     )
+
+    # Report overage if contractor exceeded limit
+    if contractor_id:
+        try:
+            report_overage_to_stripe(contractor_id)
+        except Exception as e:
+            print(f"OVERAGE CHECK ERROR: {e}")
     
     try:
         if phone:
@@ -3376,20 +3384,61 @@ async def api_bulk_followup(request: Request):
     }
 
 
+STRIPE_OVERAGE_PRICE_ID = "price_1TInrOCNb2u2ZxII603slv6F"
+
+PLAN_LIMITS = {
+    "launch": 100,
+    "growth": 500,
+}
+
+
+def report_overage_to_stripe(contractor_id: int):
+    """Check if contractor exceeded lead limit and report overage to Stripe."""
+    try:
+        contractor = get_contractor_by_id(contractor_id)
+        if not contractor or not contractor.get("stripe_subscription_id"):
+            return
+
+        monthly_count = get_monthly_lead_count(contractor_id)
+        lead_limit = contractor.get("lead_limit", 100)
+
+        if monthly_count <= lead_limit:
+            return  # Within limit, no overage
+
+        # Find the metered subscription item
+        subscription = stripe.Subscription.retrieve(contractor["stripe_subscription_id"])
+        metered_item = None
+        for item in subscription["items"]["data"]:
+            if item["price"]["id"] == STRIPE_OVERAGE_PRICE_ID:
+                metered_item = item
+                break
+
+        if not metered_item:
+            return
+
+        # Report 1 unit of usage (this lead is an overage)
+        stripe.SubscriptionItem.create_usage_record(
+            metered_item["id"],
+            quantity=1,
+            action="increment",
+        )
+        print(f"OVERAGE REPORTED: contractor {contractor_id}, lead #{monthly_count} (limit: {lead_limit})")
+
+    except Exception as e:
+        print(f"OVERAGE REPORTING ERROR: {e}")
+
+
 @app.get("/create-checkout-launch")
-def create_checkout_launch():
+def create_checkout_launch(request: Request):
+    contractor_id = request.session.get("contractor_id")
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
         mode="subscription",
+        client_reference_id=str(contractor_id) if contractor_id else None,
         line_items=[
-            {
-                "price": "price_1TG32LCNb2u2ZxIIx4YaMYLG",  # Launch monthly €299
-                "quantity": 1,
-            },
-            {
-                "price": "price_1TGGc6CNb2u2ZxIIMeH8wBo5",  # Launch setup fee
-                "quantity": 1,
-            },
+            {"price": "price_1TG32LCNb2u2ZxIIx4YaMYLG", "quantity": 1},
+            {"price": "price_1TGGc6CNb2u2ZxIIMeH8wBo5", "quantity": 1},
+            {"price": STRIPE_OVERAGE_PRICE_ID},
         ],
         success_url="https://kazfen.com/static/success.html",
         cancel_url="https://kazfen.com/static/pricing.html",
@@ -3398,19 +3447,16 @@ def create_checkout_launch():
 
 
 @app.get("/create-checkout-growth")
-def create_checkout_growth():
+def create_checkout_growth(request: Request):
+    contractor_id = request.session.get("contractor_id")
     session = stripe.checkout.Session.create(
         payment_method_types=["card"],
         mode="subscription",
+        client_reference_id=str(contractor_id) if contractor_id else None,
         line_items=[
-            {
-                "price": "price_1TG345CNb2u2ZxII6Z8sx8A9",  # Growth monthly €999
-                "quantity": 1,
-            },
-            {
-                "price": "price_1TGGcfCNb2u2ZxIIjcmZF9xT",  # Growth setup fee
-                "quantity": 1,
-            },
+            {"price": "price_1TG345CNb2u2ZxII6Z8sx8A9", "quantity": 1},
+            {"price": "price_1TGGcfCNb2u2ZxIIjcmZF9xT", "quantity": 1},
+            {"price": STRIPE_OVERAGE_PRICE_ID},
         ],
         success_url="https://kazfen.com/static/success.html",
         cancel_url="https://kazfen.com/static/pricing.html",
@@ -3437,16 +3483,36 @@ async def stripe_webhook(request: Request):
 
     print("Stripe event:", event["type"])
 
-    # Checkout completed (new customer signup)
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         customer_email = session.get("customer_details", {}).get("email")
         subscription_id = session.get("subscription")
         customer_id = session.get("customer")
+        contractor_ref = session.get("client_reference_id")
 
         print("New customer email:", customer_email)
         print("Customer ID:", customer_id)
         print("Subscription ID:", subscription_id)
+        print("Contractor ref:", contractor_ref)
+
+        # Link Stripe to contractor
+        if contractor_ref and customer_id and subscription_id:
+            try:
+                cid = int(contractor_ref)
+                update_contractor_stripe(cid, customer_id, subscription_id)
+                # Set plan based on subscription price
+                sub = stripe.Subscription.retrieve(subscription_id)
+                for item in sub["items"]["data"]:
+                    price_id = item["price"]["id"]
+                    if price_id == "price_1TG345CNb2u2ZxII6Z8sx8A9":
+                        update_contractor_plan(cid, "growth", 500)
+                        break
+                    elif price_id == "price_1TG32LCNb2u2ZxIIx4YaMYLG":
+                        update_contractor_plan(cid, "launch", 100)
+                        break
+                print(f"STRIPE LINKED: contractor {cid}")
+            except Exception as e:
+                print(f"STRIPE LINK ERROR: {e}")
 
     # Recurring subscription payment successful
     elif event["type"] == "invoice.paid":
